@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+web/node_modules/
+
+# env / secrets — NEVER commit real keys
+.env
+.env.local
+.env*.local
+web/.env
+contracts/.env
+
+# next.js
+web/.next/
+web/out/
+
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+
+# misc
+.DS_Store
+*.log

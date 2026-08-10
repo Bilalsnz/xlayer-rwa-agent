@@ -135,27 +135,46 @@ export async function POST(req: Request) {
     ? `${prompt}\n\nContext (JSON):\n${JSON.stringify(body.context).slice(0, 6000)}`
     : prompt;
 
-  try {
-    const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        temperature: 0.2,
-        max_tokens: 2048,
-        messages: [
-          { role: "system", content: RWA_SYSTEM_PROMPT },
-          { role: "user", content: userContent },
-        ],
-        tools: [ANALYSIS_TOOL],
-        tool_choice: { type: "function", function: { name: "submit_rwa_analysis" } },
-      }),
-    });
+  const requestBody = JSON.stringify({
+    model: AI_MODEL,
+    temperature: 0.2,
+    max_tokens: 2048,
+    messages: [
+      { role: "system", content: RWA_SYSTEM_PROMPT },
+      { role: "user", content: userContent },
+    ],
+    tools: [ANALYSIS_TOOL],
+    tool_choice: { type: "function", function: { name: "submit_rwa_analysis" } },
+  });
 
-    const data = await res.json();
+  try {
+    let res!: Response;
+    let data: any;
+    // Groq free-tier TPM limits are transient — the error tells us how long to
+    // wait. Retry once so a rapid demo click surfaces an answer, not a 429.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      res = await fetch(`${AI_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: requestBody,
+      });
+      data = await res.json();
+      if (res.status !== 429 || attempt === 1) break;
+      const hint = /try again in ([\d.]+)\s*s/i.exec(data?.error?.message ?? "");
+      const headerWait = Number(res.headers.get("retry-after"));
+      const waitS = Math.min(6, Math.max(hint ? parseFloat(hint[1]) : headerWait || 2, 1));
+      await new Promise((r) => setTimeout(r, Math.ceil(waitS * 1000) + 250));
+    }
+
+    if (res.status === 429) {
+      return NextResponse.json(
+        { error: "The AI model is busy right now (free-tier limit). Wait a few seconds and try again." },
+        { status: 503 },
+      );
+    }
     if (!res.ok) {
       const msg = data?.error?.message ?? `HTTP ${res.status}`;
       return NextResponse.json({ error: `AI provider error: ${msg}` }, { status: 502 });

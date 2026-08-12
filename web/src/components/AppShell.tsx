@@ -1,15 +1,29 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAccount, useChainId, useWriteContract, useSendTransaction } from "wagmi";
-import { keccak256, stringToHex } from "viem";
 import type { AssetAnalysis, RWAAnalysis, SuggestedAction } from "@/lib/schema";
-import { REGISTRY_ABI, RECOMMENDATION_ENUM, registryAddress } from "@/lib/contract";
-import { buildOkxDexSwapUrl, actionLabel } from "@/lib/okxDex";
+import {
+  LOGGER_ABI,
+  loggerAddress,
+  buildRecommendationString,
+  readLatestRecommendation,
+  explorerTxUrl,
+  type AnchorPayload,
+} from "@/lib/logger";
+import { readHoldings, holdingsSummary, type Holding } from "@/lib/holdings";
+import { buildOkxDexSwapUrl, buildSwapUrlForSymbol, actionLabel } from "@/lib/okxDex";
 import { xLayer, xLayerTestnet } from "@/lib/chains";
 import { BottomNav, type NavPage } from "@/components/BottomNav";
 
 /* ---------------------------------------------------------------- shared UI */
+
+const RECO_LABEL: Record<string, string> = { buy: "Buy", hold: "Hold", sell: "Reduce", avoid: "Avoid" };
+const recoLabel = (r: string) => RECO_LABEL[r] ?? r;
+/** Schema stores confidence 0-100; the UI shows it as x/10. */
+const conf10 = (c: number) => (c > 0 ? Math.max(1, Math.round(c / 10)) : 0);
+
+type RiskTolerance = "conservative" | "moderate" | "aggressive";
 
 function scoreColor(v: number, invert = false) {
   const good = invert ? v <= 33 : v >= 66;
@@ -31,7 +45,15 @@ function Meter({ label, value, invert }: { label: string; value: number; invert?
   );
 }
 
-function AssetCard({ a, onAnchor }: { a: AssetAnalysis; onAnchor: (a: AssetAnalysis) => void }) {
+function AssetCard({
+  a,
+  onAnchor,
+  onSwap,
+}: {
+  a: AssetAnalysis;
+  onAnchor: (a: AssetAnalysis) => void;
+  onSwap: (a: AssetAnalysis) => void;
+}) {
   return (
     <div className="rounded-xl border border-border bg-panel p-4">
       <div className="flex items-start justify-between">
@@ -40,7 +62,7 @@ function AssetCard({ a, onAnchor }: { a: AssetAnalysis; onAnchor: (a: AssetAnaly
           <div className="text-xs text-muted">{a.name}</div>
         </div>
         <span className="rounded-md border border-border bg-panel2 px-2 py-1 text-xs uppercase">
-          {a.recommendation} · {a.confidence}%
+          {recoLabel(a.recommendation)} · {conf10(a.confidence)}/10
         </span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -51,20 +73,28 @@ function AssetCard({ a, onAnchor }: { a: AssetAnalysis; onAnchor: (a: AssetAnaly
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
         <div>
-          <div className="text-muted">Risks</div>
-          <ul className="list-disc pl-4 text-bad/90">{a.key_risks.map((r, i) => <li key={i}>{r}</li>)}</ul>
-        </div>
-        <div>
-          <div className="text-muted">Opportunities</div>
+          <div className="text-muted">Why (thesis)</div>
           <ul className="list-disc pl-4 text-good/90">{a.key_opportunities.map((r, i) => <li key={i}>{r}</li>)}</ul>
         </div>
+        <div>
+          <div className="text-muted">Risk notes</div>
+          <ul className="list-disc pl-4 text-bad/90">{a.key_risks.map((r, i) => <li key={i}>{r}</li>)}</ul>
+        </div>
       </div>
-      <button
-        onClick={() => onAnchor(a)}
-        className="mt-3 rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-white"
-      >
-        Anchor on-chain
-      </button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          onClick={() => onSwap(a)}
+          className="rounded-lg bg-good px-3 py-1.5 text-xs font-medium text-black hover:opacity-90"
+        >
+          Swap on OKX DEX
+        </button>
+        <button
+          onClick={() => onAnchor(a)}
+          className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-white"
+        >
+          Anchor on X Layer
+        </button>
+      </div>
     </div>
   );
 }
@@ -84,10 +114,12 @@ function EmptyState({ onGoAnalyze }: { onGoAnalyze: () => void }) {
 }
 
 const EXAMPLE_PROMPTS = [
-  "Analyze TSLAx and AAPLx for a 6-month hold. Moderate risk tolerance.",
+  "Analyze TSLAx and AAPLx for a 6-month hold.",
   "Compare TSLAx vs a tokenized T-bill for low risk.",
-  "Is NVDAx a buy right now? Aggressive risk tolerance.",
+  "Is NVDAx a buy right now?",
 ];
+
+const RISK_OPTIONS: RiskTolerance[] = ["conservative", "moderate", "aggressive"];
 
 /* -------------------------------------------------------------------- shell */
 
@@ -97,12 +129,19 @@ export function AppShell() {
   const { writeContractAsync } = useWriteContract();
   const { sendTransactionAsync } = useSendTransaction();
 
-  const [prompt, setPrompt] = useState("Analyze TSLAx and AAPLx for a 6-month hold. Moderate risk tolerance.");
+  const [prompt, setPrompt] = useState("Analyze TSLAx and AAPLx for a 6-month hold.");
+  const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>("moderate");
   const [analysis, setAnalysis] = useState<RWAAnalysis | null>(null);
   const [rawJson, setRawJson] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+
+  // Wallet holdings (read from free RPC) + on-chain state.
+  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [holdingsLoading, setHoldingsLoading] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [latestOnChain, setLatestOnChain] = useState<string>("");
 
   // Which tab is showing. 0=Analyze 1=Results 2=Actions 3=Wallet.
   const [page, setPage] = useState(0);
@@ -118,6 +157,34 @@ export function AppShell() {
   function goto(id: number) {
     setPage(Math.max(0, Math.min(PAGES.length - 1, id)));
   }
+
+  // Feature 1: read real balances whenever the wallet / chain changes.
+  useEffect(() => {
+    if (!isConnected || !address) {
+      setHoldings([]);
+      return;
+    }
+    let cancelled = false;
+    setHoldingsLoading(true);
+    readHoldings(chainId, address as `0x${string}`)
+      .then((h) => !cancelled && setHoldings(h))
+      .catch(() => !cancelled && setHoldings([]))
+      .finally(() => !cancelled && setHoldingsLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [isConnected, address, chainId]);
+
+  // Show the current on-chain recommendation (read-back) on load + chain change.
+  useEffect(() => {
+    let cancelled = false;
+    readLatestRecommendation(chainId)
+      .then((v) => !cancelled && setLatestOnChain(v))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [chainId]);
 
   // Lightweight swipe between tabs — sells the "mobile app" feel, no deps.
   function onTouchStart(e: React.TouchEvent) {
@@ -139,10 +206,17 @@ export function AppShell() {
     setError(null);
     setStatus(null);
     try {
+      // Feature 1 + 2: give the model the user's REAL holdings + risk tolerance.
+      const context = {
+        network: chainId === xLayer.id ? "X Layer Mainnet (196)" : "X Layer Testnet (1952)",
+        riskTolerance,
+        walletConnected: isConnected,
+        holdings: isConnected ? holdingsSummary(holdings) : "wallet not connected",
+      };
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, context }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Request failed");
@@ -156,59 +230,88 @@ export function AppShell() {
     }
   }
 
-  async function anchor(a: AssetAnalysis) {
-    setStatus(null);
+  /* ------------------------------------------------- on-chain anchor (real) */
+
+  // Anchors to the REAL deployed RWARecommendationLogger via logRecommendation(string).
+  async function doAnchor(payload: AnchorPayload, label: string) {
     setError(null);
-    const addr = registryAddress(chainId);
+    setStatus(null);
+    setTxHash(null);
+    if (!isConnected) {
+      setError("Connect your OKX wallet first (top-right), then anchor.");
+      setPage(3);
+      return;
+    }
+    const addr = loggerAddress(chainId);
     if (!addr) {
-      setError("Registry address not configured for this chain. Deploy the contract and set the env var.");
+      setError("On-chain logger isn't available on this network. Switch to X Layer Testnet (1952).");
       setPage(3);
       return;
     }
     try {
-      // contentHash binds the on-chain record to the exact JSON payload.
-      const contentHash = keccak256(stringToHex(rawJson || JSON.stringify(analysis)));
-      const analysisId = keccak256(stringToHex(`${a.symbol}:${contentHash}`));
-      // Ensure the agent is registered (idempotent), then log.
-      await writeContractAsync({
+      const recString = buildRecommendationString(payload);
+      setStatus(`Confirm in your wallet to anchor ${label} on X Layer…`);
+      const hash = await writeContractAsync({
         address: addr,
-        abi: REGISTRY_ABI,
-        functionName: "registerAgent",
-        args: ["ipfs://x-rwa-agent"],
+        abi: LOGGER_ABI,
+        functionName: "logRecommendation",
+        args: [recString],
       });
-      const tx = await writeContractAsync({
-        address: addr,
-        abi: REGISTRY_ABI,
-        functionName: "logAnalysis",
-        args: [
-          analysisId,
-          a.symbol,
-          a.risk_score,
-          a.liquidity_score,
-          a.yield_potential,
-          a.sentiment_score,
-          a.confidence,
-          RECOMMENDATION_ENUM[a.recommendation] ?? 0,
-          contentHash,
-        ],
-      });
-      setStatus(`Anchored ${a.symbol} on-chain. Tx: ${tx}`);
-      setPage(3); // surface the tx on the Wallet & On-chain tab
+      setTxHash(hash);
+      setStatus(`✅ Anchored ${label} on X Layer.`);
+      setPage(3); // surface the tx + on-chain value on the Wallet tab
+      // Best-effort read-back so the Wallet tab shows the freshly stored value.
+      readLatestRecommendation(chainId).then(setLatestOnChain).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : "Transaction failed");
     }
   }
 
+  function anchorAnalysis() {
+    if (!analysis) return;
+    const assets = analysis.assets_analyzed;
+    const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((s, x) => s + x, 0) / xs.length) : 0);
+    doAnchor(
+      {
+        summary: analysis.summary,
+        symbols: assets.map((a) => a.symbol),
+        riskScore: avg(assets.map((a) => a.risk_score)),
+        confidence: avg(assets.map((a) => a.confidence)),
+        recommendation: recoLabel(assets[0]?.recommendation ?? "hold"),
+      },
+      "this analysis",
+    );
+  }
+
+  function anchorAsset(a: AssetAnalysis) {
+    doAnchor(
+      {
+        summary: analysis?.summary ?? `${a.symbol} analysis`,
+        symbols: [a.symbol],
+        riskScore: a.risk_score,
+        confidence: a.confidence,
+        recommendation: recoLabel(a.recommendation),
+      },
+      a.symbol,
+    );
+  }
+
+  /* ----------------------------------------------------- OKX DEX execution */
+
   function openDeepLink(action: SuggestedAction) {
     window.open(buildOkxDexSwapUrl(action, chainId || xLayer.id), "_blank", "noopener");
+  }
+
+  function swapSymbol(a: AssetAnalysis) {
+    window.open(buildSwapUrlForSymbol(a.symbol, chainId || xLayer.id), "_blank", "noopener");
   }
 
   async function execute(action: SuggestedAction) {
     setError(null);
     setStatus(null);
-    // 1) Try the OKX DEX Aggregator API for a prepared, user-signed transaction.
-    //    Falls back to the deep link whenever tokens aren't verified/executable
-    //    or the API isn't configured (server responds with { fallback: true }).
+    // Try the OKX DEX Aggregator API for a prepared, user-signed transaction;
+    // fall back to the deep link whenever tokens aren't verified/executable or
+    // the API isn't configured (server responds with { fallback: true }).
     if (!address) {
       openDeepLink(action);
       return;
@@ -235,7 +338,6 @@ export function AppShell() {
         }
         throw new Error(data.error ?? "OKX request failed");
       }
-      // Approve first (ERC-20 sell-side), then the swap — both signed by the user.
       if (data.approveTx) {
         setStatus("Confirm the token approval in your wallet…");
         await sendTransactionAsync({ to: data.approveTx.to, data: data.approveTx.data });
@@ -248,16 +350,13 @@ export function AppShell() {
       });
       setStatus(`Swap submitted to OKX DEX. Tx: ${hash}`);
     } catch (e) {
-      // Any failure (incl. user rejection) — offer the manual deep link.
       openDeepLink(action);
       setError(e instanceof Error ? `${e.message} — opened OKX DEX as fallback.` : "Opened OKX DEX as fallback.");
     }
   }
 
   const explorer =
-    chainId === xLayer.id
-      ? xLayer.blockExplorers.default.url
-      : xLayerTestnet.blockExplorers.default.url;
+    chainId === xLayer.id ? xLayer.blockExplorers.default.url : xLayerTestnet.blockExplorers.default.url;
 
   return (
     <>
@@ -279,6 +378,25 @@ export function AppShell() {
                   className="mt-2 w-full resize-none rounded-lg border border-border bg-bg p-3 text-sm outline-none focus:border-accent"
                   placeholder="Ask about tokenized RWAs, e.g. 'Compare TSLAx vs a tokenized T-bill for low risk'"
                 />
+
+                {/* Feature 2: risk tolerance drives position sizing. */}
+                <div className="mt-3">
+                  <div className="text-xs uppercase text-muted">Risk tolerance</div>
+                  <div className="mt-1 inline-flex rounded-lg border border-border bg-bg p-0.5">
+                    {RISK_OPTIONS.map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setRiskTolerance(r)}
+                        className={`rounded-md px-3 py-1 text-xs capitalize ${
+                          riskTolerance === r ? "bg-accent text-white" : "text-muted hover:text-white"
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <button
                     onClick={runAnalysis}
@@ -287,7 +405,13 @@ export function AppShell() {
                   >
                     {loading ? "Analyzing…" : "Analyze"}
                   </button>
-                  {!isConnected && <span className="text-xs text-muted">Connect a wallet to anchor results on-chain.</span>}
+                  {isConnected ? (
+                    <span className="text-xs text-muted">
+                      Using your holdings: <span className="text-white">{holdingsLoading ? "reading…" : holdingsSummary(holdings)}</span>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted">Connect a wallet to personalize with your real holdings.</span>
+                  )}
                 </div>
               </div>
 
@@ -313,13 +437,54 @@ export function AppShell() {
             (analysis ? (
               <div className="space-y-6">
                 <div className="rounded-xl border border-border bg-panel p-4">
-                  <div className="text-xs uppercase text-muted">Summary</div>
-                  <p className="mt-1 text-sm">{analysis.summary}</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs uppercase text-muted">Summary</div>
+                    <button
+                      onClick={anchorAnalysis}
+                      className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                    >
+                      ⚓ Anchor on X Layer
+                    </button>
+                  </div>
+                  <p className="mt-2 text-sm">{analysis.summary}</p>
                 </div>
+
+                {/* Feature 4: side-by-side comparison when >1 asset. */}
+                {analysis.assets_analyzed.length > 1 && (
+                  <div className="rounded-xl border border-border bg-panel p-4">
+                    <div className="text-xs uppercase text-muted">Comparison</div>
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-muted">
+                            <th className="py-1 pr-3">Asset</th>
+                            <th className="py-1 pr-3">Call</th>
+                            <th className="py-1 pr-3">Conf.</th>
+                            <th className="py-1 pr-3">Risk</th>
+                            <th className="py-1 pr-3">Liq.</th>
+                            <th className="py-1 pr-3">Yield</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analysis.assets_analyzed.map((a) => (
+                            <tr key={a.symbol} className="border-t border-border">
+                              <td className="py-1.5 pr-3 font-medium">{a.symbol}</td>
+                              <td className="py-1.5 pr-3">{recoLabel(a.recommendation)}</td>
+                              <td className="py-1.5 pr-3">{conf10(a.confidence)}/10</td>
+                              <td className={`py-1.5 pr-3 ${scoreColor(a.risk_score, true)}`}>{a.risk_score}</td>
+                              <td className={`py-1.5 pr-3 ${scoreColor(a.liquidity_score)}`}>{a.liquidity_score}</td>
+                              <td className={`py-1.5 pr-3 ${scoreColor(a.yield_potential)}`}>{a.yield_potential}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid gap-4 md:grid-cols-2">
                   {analysis.assets_analyzed.map((a) => (
-                    <AssetCard key={a.symbol} a={a} onAnchor={anchor} />
+                    <AssetCard key={a.symbol} a={a} onAnchor={anchorAsset} onSwap={swapSymbol} />
                   ))}
                 </div>
 
@@ -369,7 +534,7 @@ export function AppShell() {
                             onClick={() => execute(act)}
                             className="shrink-0 rounded-lg bg-good px-3 py-1.5 text-xs font-medium text-black hover:opacity-90"
                           >
-                            Execute on OKX DEX
+                            Swap on OKX DEX
                           </button>
                         ) : (
                           <span className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-muted">
@@ -407,23 +572,59 @@ export function AppShell() {
                 )}
               </div>
 
+              {/* Feature 1: real balances read from the free RPC. */}
               <div className="rounded-xl border border-border bg-panel p-4">
-                <div className="text-xs uppercase text-muted">On-chain registry</div>
+                <div className="text-xs uppercase text-muted">Holdings</div>
+                {!isConnected ? (
+                  <p className="mt-2 text-sm text-muted">Connect your wallet to read balances from X Layer.</p>
+                ) : holdingsLoading ? (
+                  <p className="mt-2 text-sm text-muted">Reading balances…</p>
+                ) : holdings.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted">No balances found on this network.</p>
+                ) : (
+                  <div className="mt-2 space-y-1">
+                    {holdings.map((h) => (
+                      <div key={h.symbol} className="flex justify-between text-sm">
+                        <span className="text-muted">{h.symbol}{h.isNative ? " (native)" : ""}</span>
+                        <span className="font-mono">{Number(h.balance).toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>
+                      </div>
+                    ))}
+                    <p className="pt-1 text-xs text-muted">Tokenized-stock balances appear here once their X Layer addresses are verified in the token registry.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-border bg-panel p-4">
+                <div className="text-xs uppercase text-muted">On-chain logger</div>
                 <div className="mt-2 space-y-1 text-sm">
                   <div className="flex justify-between gap-3">
-                    <span className="text-muted">This chain</span>
-                    <span className={registryAddress(chainId) ? "font-mono text-xs text-good break-all" : "text-warn"}>
-                      {registryAddress(chainId) ?? "not deployed yet"}
+                    <span className="text-muted">Contract</span>
+                    <span className={loggerAddress(chainId) ? "font-mono text-xs text-good break-all" : "text-warn"}>
+                      {loggerAddress(chainId) ?? "not available on this chain"}
                     </span>
                   </div>
-                  <a href={explorer} target="_blank" rel="noopener noreferrer" className="inline-block text-xs text-accent hover:underline">
+                  {txHash && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-muted">Last anchor tx</span>
+                      <a href={explorerTxUrl(chainId, txHash)} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-accent hover:underline break-all">
+                        {txHash.slice(0, 10)}… ↗
+                      </a>
+                    </div>
+                  )}
+                  {latestOnChain && (
+                    <div className="pt-1">
+                      <div className="text-muted">Latest recommendation on-chain</div>
+                      <pre className="mt-1 overflow-x-auto rounded-lg bg-bg p-2 text-xs text-muted">{latestOnChain}</pre>
+                    </div>
+                  )}
+                  <a href={explorer} target="_blank" rel="noopener noreferrer" className="inline-block pt-1 text-xs text-accent hover:underline">
                     Open OKLink explorer ↗
                   </a>
                 </div>
                 <p className="mt-3 text-xs text-muted">
-                  “Anchor on-chain” (on the Results tab) writes each analysis’ compact scores plus a
-                  keccak256 hash of the full JSON to <span className="text-white">RWAAgentRegistry</span> on X Layer,
-                  so anyone can verify the record by re-hashing the payload. No funds are ever held.
+                  “Anchor on X Layer” calls <span className="text-white">logRecommendation(string)</span> on the real
+                  RWARecommendationLogger contract, storing the analysis (summary, symbols, risk, confidence,
+                  recommendation) so anyone can read it back on-chain. No funds are ever held.
                 </p>
               </div>
             </div>

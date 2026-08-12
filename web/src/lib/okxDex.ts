@@ -24,6 +24,17 @@ export function buildOkxDexSwapUrl(action: SuggestedAction, chainId = 196): stri
   return `${OKX_DEX_SWAP_BASE}?${params.toString()}`;
 }
 
+/** Deep link to swap INTO a given asset (from OKB) on OKX DEX for this chain. */
+export function buildSwapUrlForSymbol(symbol: string, chainId = 196): string {
+  const params = new URLSearchParams({
+    inputChain: String(chainId),
+    outputChain: String(chainId),
+    inputCurrency: "OKB",
+    outputCurrency: symbol,
+  });
+  return `${OKX_DEX_SWAP_BASE}?${params.toString()}`;
+}
+
 /** Human label for an action button. */
 export function actionLabel(action: SuggestedAction): string {
   if (action.action === "swap") {

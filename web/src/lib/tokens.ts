@@ -36,6 +36,12 @@ export const TOKENS: Registry = {
   1952: {
     OKB: { symbol: "OKB", address: NATIVE_TOKEN_ADDRESS, decimals: 18 },
     USDC: { symbol: "USDC", address: "", decimals: 6, isStable: true },
+    // Tokenized stocks tracked for the holdings panel. Balances are only read
+    // once a verified X Layer Testnet ERC-20 address is filled in below — until
+    // then the wallet simply shows its OKB balance (never a wrong-address read).
+    TSLAX: { symbol: "TSLAx", address: "", decimals: 18 },
+    AAPLX: { symbol: "AAPLx", address: "", decimals: 18 },
+    NVDAX: { symbol: "NVDAx", address: "", decimals: 18 },
   },
 };
 

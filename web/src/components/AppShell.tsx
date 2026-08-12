@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAccount, useChainId, useWriteContract, useSendTransaction } from "wagmi";
+import { useAccount, useChainId, useWriteContract, useSendTransaction, useSwitchChain } from "wagmi";
 import type { AssetAnalysis, RWAAnalysis, SuggestedAction } from "@/lib/schema";
 import {
   LOGGER_ABI,
@@ -24,6 +24,26 @@ const recoLabel = (r: string) => RECO_LABEL[r] ?? r;
 const conf10 = (c: number) => (c > 0 ? Math.max(1, Math.round(c / 10)) : 0);
 
 type RiskTolerance = "conservative" | "moderate" | "aggressive";
+
+/**
+ * The RWARecommendationLogger contract is deployed on X Layer TESTNET (1952) —
+ * verified on-chain (it is NOT on mainnet 196). We anchor there no matter what
+ * network the wallet starts on. If a mainnet logger address is ever configured
+ * (NEXT_PUBLIC_LOGGER_ADDRESS_MAINNET), this automatically prefers mainnet (196).
+ */
+const ANCHOR_CHAIN = loggerAddress(xLayer.id) ? xLayer : xLayerTestnet;
+
+/** Turn wallet/RPC errors into one friendly line. */
+function anchorErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/user rejected|user denied|rejected the request|\b4001\b/i.test(msg)) {
+    return "You cancelled the request in your wallet.";
+  }
+  if (/\b4902\b|unrecognized chain|add.*chain|switch/i.test(msg)) {
+    return `Couldn't switch your wallet to ${ANCHOR_CHAIN.name}. Add the network in your wallet and try again.`;
+  }
+  return msg.length > 180 ? `${msg.slice(0, 180)}…` : msg;
+}
 
 function scoreColor(v: number, invert = false) {
   const good = invert ? v <= 33 : v >= 66;
@@ -128,6 +148,7 @@ export function AppShell() {
   const chainId = useChainId();
   const { writeContractAsync } = useWriteContract();
   const { sendTransactionAsync } = useSendTransaction();
+  const { switchChainAsync } = useSwitchChain();
 
   const [prompt, setPrompt] = useState("Analyze TSLAx and AAPLx for a 6-month hold.");
   const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>("moderate");
@@ -233,6 +254,8 @@ export function AppShell() {
   /* ------------------------------------------------- on-chain anchor (real) */
 
   // Anchors to the REAL deployed RWARecommendationLogger via logRecommendation(string).
+  // Ensures the wallet is on X Layer FIRST (adding the network if missing), then pins
+  // the transaction to that chain so it can never be sent on Ethereum by mistake.
   async function doAnchor(payload: AnchorPayload, label: string) {
     setError(null);
     setStatus(null);
@@ -242,28 +265,41 @@ export function AppShell() {
       setPage(3);
       return;
     }
-    const addr = loggerAddress(chainId);
+    const addr = loggerAddress(ANCHOR_CHAIN.id);
     if (!addr) {
-      setError("On-chain logger isn't available on this network. Switch to X Layer Testnet (1952).");
+      setError("On-chain logger address isn't configured. Contact the app owner.");
       setPage(3);
       return;
     }
     try {
+      // 1) Make sure the wallet is on X Layer. If the wallet doesn't have the
+      //    network yet, wagmi falls back to wallet_addEthereumChain using the
+      //    chain definition in chains.ts (RPC, OKB, OKLink explorer).
+      if (chainId !== ANCHOR_CHAIN.id) {
+        setStatus(`Switching your wallet to ${ANCHOR_CHAIN.name}…`);
+        await switchChainAsync({ chainId: ANCHOR_CHAIN.id });
+      }
+
+      // 2) Anchor on-chain. chainId is PINNED so wagmi refuses to send on the
+      //    wrong network — this is what stops the "sent on Ethereum" bug.
       const recString = buildRecommendationString(payload);
-      setStatus(`Confirm in your wallet to anchor ${label} on X Layer…`);
+      setStatus(`Confirm in your wallet to anchor ${label} on ${ANCHOR_CHAIN.name}…`);
       const hash = await writeContractAsync({
+        chainId: ANCHOR_CHAIN.id,
         address: addr,
         abi: LOGGER_ABI,
         functionName: "logRecommendation",
         args: [recString],
       });
+
+      // 3) Success — surface the tx hash + a clickable OKLink explorer link.
       setTxHash(hash);
-      setStatus(`✅ Anchored ${label} on X Layer.`);
-      setPage(3); // surface the tx + on-chain value on the Wallet tab
-      // Best-effort read-back so the Wallet tab shows the freshly stored value.
-      readLatestRecommendation(chainId).then(setLatestOnChain).catch(() => {});
+      setStatus(`✅ Anchored ${label} on ${ANCHOR_CHAIN.name}.`);
+      setPage(3); // Wallet tab shows the tx link + reads the value back on-chain
+      readLatestRecommendation(ANCHOR_CHAIN.id).then(setLatestOnChain).catch(() => {});
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Transaction failed");
+      setError(anchorErrorMessage(e));
+      setPage(3);
     }
   }
 
@@ -606,7 +642,7 @@ export function AppShell() {
                   {txHash && (
                     <div className="flex justify-between gap-3">
                       <span className="text-muted">Last anchor tx</span>
-                      <a href={explorerTxUrl(chainId, txHash)} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-accent hover:underline break-all">
+                      <a href={explorerTxUrl(ANCHOR_CHAIN.id, txHash)} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-accent hover:underline break-all">
                         {txHash.slice(0, 10)}… ↗
                       </a>
                     </div>

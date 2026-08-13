@@ -158,13 +158,11 @@ export function AppShell() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
-  // Wallet holdings (read from free RPC) + on-chain state.
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [latestOnChain, setLatestOnChain] = useState<string>("");
 
-  // Which tab is showing. 0=Analyze 1=Results 2=Actions 3=Wallet.
   const [page, setPage] = useState(0);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -179,7 +177,6 @@ export function AppShell() {
     setPage(Math.max(0, Math.min(PAGES.length - 1, id)));
   }
 
-  // Feature 1: read real balances whenever the wallet / chain changes.
   useEffect(() => {
     if (!isConnected || !address) {
       setHoldings([]);
@@ -196,7 +193,6 @@ export function AppShell() {
     };
   }, [isConnected, address, chainId]);
 
-  // Show the current on-chain recommendation (read-back) on load + chain change.
   useEffect(() => {
     let cancelled = false;
     readLatestRecommendation(chainId)
@@ -207,7 +203,6 @@ export function AppShell() {
     };
   }, [chainId]);
 
-  // Lightweight swipe between tabs — sells the "mobile app" feel, no deps.
   function onTouchStart(e: React.TouchEvent) {
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   }
@@ -227,7 +222,6 @@ export function AppShell() {
     setError(null);
     setStatus(null);
     try {
-      // Feature 1 + 2: give the model the user's REAL holdings + risk tolerance.
       const context = {
         network: chainId === xLayer.id ? "X Layer Mainnet (196)" : "X Layer Testnet (1952)",
         riskTolerance,
@@ -243,7 +237,7 @@ export function AppShell() {
       if (!res.ok) throw new Error(data.error ?? "Request failed");
       setAnalysis(data.analysis);
       setRawJson(JSON.stringify(data.analysis, null, 2));
-      setPage(1); // jump to Results as soon as it's ready
+      setPage(1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -253,9 +247,6 @@ export function AppShell() {
 
   /* ------------------------------------------------- on-chain anchor (real) */
 
-  // Anchors to the REAL deployed RWARecommendationLogger via logRecommendation(string).
-  // Ensures the wallet is on X Layer FIRST (adding the network if missing), then pins
-  // the transaction to that chain so it can never be sent on Ethereum by mistake.
   async function doAnchor(payload: AnchorPayload, label: string) {
     setError(null);
     setStatus(null);
@@ -272,30 +263,28 @@ export function AppShell() {
       return;
     }
     try {
-      // 1) Make sure the wallet is on X Layer. If the wallet doesn't have the
-      //    network yet, wagmi falls back to wallet_addEthereumChain using the
-      //    chain definition in chains.ts (RPC, OKB, OKLink explorer).
       if (chainId !== ANCHOR_CHAIN.id) {
         setStatus(`Switching your wallet to ${ANCHOR_CHAIN.name}…`);
         await switchChainAsync({ chainId: ANCHOR_CHAIN.id });
       }
 
-      // 2) Anchor on-chain. chainId is PINNED so wagmi refuses to send on the
-      //    wrong network — this is what stops the "sent on Ethereum" bug.
-      const recString = buildRecommendationString(payload);
       setStatus(`Confirm in your wallet to anchor ${label} on ${ANCHOR_CHAIN.name}…`);
       const hash = await writeContractAsync({
         chainId: ANCHOR_CHAIN.id,
         address: addr,
         abi: LOGGER_ABI,
-        functionName: "logRecommendation",
-        args: [recString],
+        functionName: "anchor",
+        args: [
+          payload.summary || "Analysis",
+          Array.isArray(payload.symbols) ? payload.symbols.join(",") : (payload.symbols || ""),
+          payload.riskScore ?? 50,
+          Math.min(10, Math.max(1, Math.round((payload.confidence ?? 70) / 10))),
+        ],
       });
 
-      // 3) Success — surface the tx hash + a clickable OKLink explorer link.
       setTxHash(hash);
       setStatus(`✅ Anchored ${label} on ${ANCHOR_CHAIN.name}.`);
-      setPage(3); // Wallet tab shows the tx link + reads the value back on-chain
+      setPage(3);
       readLatestRecommendation(ANCHOR_CHAIN.id).then(setLatestOnChain).catch(() => {});
     } catch (e) {
       setError(anchorErrorMessage(e));
@@ -345,9 +334,6 @@ export function AppShell() {
   async function execute(action: SuggestedAction) {
     setError(null);
     setStatus(null);
-    // Try the OKX DEX Aggregator API for a prepared, user-signed transaction;
-    // fall back to the deep link whenever tokens aren't verified/executable or
-    // the API isn't configured (server responds with { fallback: true }).
     if (!address) {
       openDeepLink(action);
       return;
@@ -397,7 +383,6 @@ export function AppShell() {
   return (
     <>
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        {/* Banners are global so on-chain status/errors are visible on every tab. */}
         {error && <div className="mb-4 rounded-lg border border-bad/40 bg-bad/10 p-3 text-sm text-bad break-all">{error}</div>}
         {status && <div className="mb-4 rounded-lg border border-good/40 bg-good/10 p-3 text-sm text-good break-all">{status}</div>}
 
@@ -415,7 +400,6 @@ export function AppShell() {
                   placeholder="Ask about tokenized RWAs, e.g. 'Compare TSLAx vs a tokenized T-bill for low risk'"
                 />
 
-                {/* Feature 2: risk tolerance drives position sizing. */}
                 <div className="mt-3">
                   <div className="text-xs uppercase text-muted">Risk tolerance</div>
                   <div className="mt-1 inline-flex rounded-lg border border-border bg-bg p-0.5">
@@ -485,7 +469,6 @@ export function AppShell() {
                   <p className="mt-2 text-sm">{analysis.summary}</p>
                 </div>
 
-                {/* Feature 4: side-by-side comparison when >1 asset. */}
                 {analysis.assets_analyzed.length > 1 && (
                   <div className="rounded-xl border border-border bg-panel p-4">
                     <div className="text-xs uppercase text-muted">Comparison</div>
@@ -524,10 +507,9 @@ export function AppShell() {
                   ))}
                 </div>
 
-                <details className="rounded-xl border border-border bg-panel p-4">
-                  <summary className="cursor-pointer text-xs uppercase text-muted">Raw JSON output</summary>
+                **Summary:**
+Raw JSON output
                   <pre className="mt-2 overflow-x-auto text-xs text-muted">{rawJson}</pre>
-                </details>
               </div>
             ) : (
               <EmptyState onGoAnalyze={() => setPage(0)} />
@@ -608,7 +590,6 @@ export function AppShell() {
                 )}
               </div>
 
-              {/* Feature 1: real balances read from the free RPC. */}
               <div className="rounded-xl border border-border bg-panel p-4">
                 <div className="text-xs uppercase text-muted">Holdings</div>
                 {!isConnected ? (
@@ -658,9 +639,8 @@ export function AppShell() {
                   </a>
                 </div>
                 <p className="mt-3 text-xs text-muted">
-                  “Anchor on X Layer” calls <span className="text-white">logRecommendation(string)</span> on the real
-                  RWARecommendationLogger contract, storing the analysis (summary, symbols, risk, confidence,
-                  recommendation) so anyone can read it back on-chain. No funds are ever held.
+                  “Anchor on X Layer” calls <span className="text-white">anchor(...)</span> on the real
+                  RWARecommendationLogger contract, storing the analysis so anyone can read it back on-chain. No funds are ever held.
                 </p>
               </div>
             </div>

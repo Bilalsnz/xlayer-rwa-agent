@@ -5,29 +5,27 @@ import { publicClientFor } from "./rpc";
  * REAL deployed contract on X Layer Testnet (chain 1952):
  *   RWARecommendationLogger @ 0x154D2fc1E2bFDE164691A5d99578cEBb259d4c0F
  *
- * The contract's source/ABI is not published, so this ABI was recovered from
- * the on-chain bytecode by matching the two function selectors:
- *   - logRecommendation(string)     selector 0x94533384  (writer)
- *   - latestRecommendation() view   selector 0x0e894094  (returns string)
- *
- * The writer takes a SINGLE string, so we pack the analysis fields the brief
- * asked for (summary, symbols, riskScore, confidence, recommendation) into one
- * JSON string and store that. Anyone can verify by reading latestRecommendation().
+ * Correct ABI matching the actual contract we deployed.
  */
 export const LOGGER_ABI = [
   {
     type: "function",
-    name: "logRecommendation",
+    name: "anchor",
     stateMutability: "nonpayable",
-    inputs: [{ name: "recommendation", type: "string" }],
+    inputs: [
+      { name: "summary", type: "string" },
+      { name: "symbols", type: "string" },
+      { name: "riskScore", type: "uint8" },
+      { name: "confidence", type: "uint8" },
+    ],
     outputs: [],
   },
   {
     type: "function",
-    name: "latestRecommendation",
+    name: "getUserCount",
     stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "string" }],
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
   },
 ] as const;
 
@@ -56,7 +54,7 @@ export interface AnchorPayload {
   recommendation: string;
 }
 
-/** Pack the four brief-specified fields into the single string the contract stores. */
+/** Kept for compatibility (not used by the new anchor call). */
 export function buildRecommendationString(p: AnchorPayload): string {
   return JSON.stringify({
     app: "X-RWA Agent",
@@ -69,21 +67,9 @@ export function buildRecommendationString(p: AnchorPayload): string {
   });
 }
 
-/** Read the current on-chain recommendation string (free RPC). "" if none/unavailable. */
+/** Read is currently not available with the new ABI (no latestRecommendation view). */
 export async function readLatestRecommendation(chainId: number): Promise<string> {
-  const addr = loggerAddress(chainId);
-  if (!addr) return "";
-  try {
-    const client = publicClientFor(chainId);
-    const val = await client.readContract({
-      address: addr,
-      abi: LOGGER_ABI,
-      functionName: "latestRecommendation",
-    });
-    return (val as string) ?? "";
-  } catch {
-    return "";
-  }
+  return "";
 }
 
 /** OKLink explorer link for a transaction hash on the given chain. */
@@ -92,5 +78,5 @@ export function explorerTxUrl(chainId: number, hash: string): string {
     chainId === xLayer.id
       ? "https://www.oklink.com/xlayer"
       : "https://www.oklink.com/x-layer-testnet";
-  return `${base}/tx/${hash}`;
+  return `\( {base}/tx/ \){hash}`;
 }

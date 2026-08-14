@@ -22,8 +22,6 @@ const conf10 = (c: number) => (c > 0 ? Math.max(1, Math.round(c / 10)) : 0);
 
 type RiskTolerance = "conservative" | "moderate" | "aggressive";
 
-const ANCHOR_CHAIN = loggerAddress(xLayer.id) ? xLayer : xLayerTestnet;
-
 function scoreColor(v: number, invert = false) {
   const good = invert ? v <= 33 : v >= 66;
   const bad = invert ? v >= 66 : v <= 33;
@@ -222,7 +220,7 @@ export function AppShell() {
     }
   }
 
-  /* ------------------------------------------------- on-chain anchor (aggressive + demo fallback) */
+  /* ------------------------------------------------- on-chain anchor */
 
   async function doAnchor(payload: AnchorPayload, label: string) {
     setError(null);
@@ -242,15 +240,11 @@ export function AppShell() {
       return;
     }
 
-    // ========== Aggressive network switch ==========
+    // Aggressive network switch
     const X_LAYER_TESTNET_PARAMS = {
-      chainId: "0x7a0", // 1952
+      chainId: "0x7a0",
       chainName: "X Layer Testnet",
-      nativeCurrency: {
-        name: "OKB",
-        symbol: "OKB",
-        decimals: 18,
-      },
+      nativeCurrency: { name: "OKB", symbol: "OKB", decimals: 18 },
       rpcUrls: [
         "https://testrpc.xlayer.tech/terigon",
         "https://xlayertestrpc.okx.com/terigon",
@@ -260,7 +254,6 @@ export function AppShell() {
 
     try {
       setStatus("Switching to X Layer Testnet...");
-
       const provider = (window as any).okxwallet || (window as any).ethereum;
 
       if (provider) {
@@ -275,31 +268,25 @@ export function AppShell() {
               method: "wallet_addEthereumChain",
               params: [X_LAYER_TESTNET_PARAMS],
             });
-          } else {
-            throw switchError;
           }
         }
-
         await new Promise((r) => setTimeout(r, 1200));
       }
     } catch (e) {
-      console.warn("Aggressive switch failed, will try real tx then fall to demo", e);
+      console.warn("Switch failed", e);
     }
 
-    // ========== Try real transaction ==========
+    // Real call using the function that actually exists on the contract
     try {
       setStatus("Confirm the transaction in your wallet...");
+
+      const recString = buildRecommendationString(payload);
 
       const hash = await writeContractAsync({
         address: addr,
         abi: LOGGER_ABI,
-        functionName: "anchor",
-        args: [
-          payload.summary || "Analysis",
-          Array.isArray(payload.symbols) ? payload.symbols.join(",") : (payload.symbols || ""),
-          payload.riskScore ?? 50,
-          Math.min(10, Math.max(1, Math.round((payload.confidence ?? 70) / 10))),
-        ],
+        functionName: "logRecommendation",
+        args: [recString],
       });
 
       setTxHash(hash);
@@ -307,10 +294,10 @@ export function AppShell() {
       setPage(3);
       return;
     } catch (e: any) {
-      console.warn("Real transaction failed, using demo mode", e);
+      console.warn("Real tx failed, falling to demo", e);
     }
 
-    // ========== Demo Mode fallback ==========
+    // Demo fallback
     setStatus(
       `✅ Demo Mode — Analysis would be anchored on X Layer Testnet\n\nContract: ${addr}\n\nReal on-chain anchoring is ready. Currently limited by OKX Wallet mobile network handling.`
     );
@@ -646,12 +633,18 @@ Raw JSON output
                       </a>
                     </div>
                   )}
+                  {latestOnChain && (
+                    <div className="pt-1">
+                      <div className="text-muted">Latest recommendation on-chain</div>
+                      <pre className="mt-1 overflow-x-auto rounded-lg bg-bg p-2 text-xs text-muted">{latestOnChain}</pre>
+                    </div>
+                  )}
                   <a href={explorer} target="_blank" rel="noopener noreferrer" className="inline-block pt-1 text-xs text-accent hover:underline">
                     Open OKLink explorer ↗
                   </a>
                 </div>
                 <p className="mt-3 text-xs text-muted">
-                  “Anchor on X Layer” calls <span className="text-white">anchor(...)</span> on the real contract. Falls back to Demo Mode if the wallet cannot switch networks.
+                  “Anchor on X Layer” calls <span className="text-white">logRecommendation(string)</span> on the real contract. Falls back to Demo Mode if needed.
                 </p>
               </div>
             </div>

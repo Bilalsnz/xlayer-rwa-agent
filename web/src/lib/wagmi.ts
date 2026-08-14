@@ -2,11 +2,6 @@ import { http, createConfig } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { xLayer, xLayerTestnet } from "./chains";
 
-/**
- * OKX Wallet injects EIP-1193 as window.okxwallet (and also window.ethereum).
- * The injected connector with a target picks OKX specifically when present,
- * and falls back to any injected wallet otherwise.
- */
 export const wagmiConfig = createConfig({
   chains: [xLayerTestnet, xLayer],
   connectors: [
@@ -23,11 +18,11 @@ export const wagmiConfig = createConfig({
         };
       },
     }),
-    injected(), // generic fallback (MetaMask, etc.)
+    injected(),
   ],
   transports: {
-    [xLayer.id]: http(),
-    [xLayerTestnet.id]: http(),
+    [xLayer.id]: http("https://rpc.xlayer.tech"),
+    [xLayerTestnet.id]: http("https://testrpc.xlayer.tech/terigon"),
   },
   ssr: true,
 });

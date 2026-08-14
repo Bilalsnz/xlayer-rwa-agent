@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useAccount, useChainId, useWriteContract, useSendTransaction, useSwitchChain } from "wagmi";
@@ -20,20 +20,12 @@ import { BottomNav, type NavPage } from "@/components/BottomNav";
 
 const RECO_LABEL: Record<string, string> = { buy: "Buy", hold: "Hold", sell: "Reduce", avoid: "Avoid" };
 const recoLabel = (r: string) => RECO_LABEL[r] ?? r;
-/** Schema stores confidence 0-100; the UI shows it as x/10. */
 const conf10 = (c: number) => (c > 0 ? Math.max(1, Math.round(c / 10)) : 0);
 
 type RiskTolerance = "conservative" | "moderate" | "aggressive";
 
-/**
- * The RWARecommendationLogger contract is deployed on X Layer TESTNET (1952) —
- * verified on-chain (it is NOT on mainnet 196). We anchor there no matter what
- * network the wallet starts on. If a mainnet logger address is ever configured
- * (NEXT_PUBLIC_LOGGER_ADDRESS_MAINNET), this automatically prefers mainnet (196).
- */
 const ANCHOR_CHAIN = loggerAddress(xLayer.id) ? xLayer : xLayerTestnet;
 
-/** Turn wallet/RPC errors into one friendly line. */
 function anchorErrorMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (/user rejected|user denied|rejected the request|\b4001\b/i.test(msg)) {
@@ -251,24 +243,49 @@ export function AppShell() {
     setError(null);
     setStatus(null);
     setTxHash(null);
+
     if (!isConnected) {
       setError("Connect your OKX wallet first (top-right), then anchor.");
       setPage(3);
       return;
     }
+
     const addr = loggerAddress(ANCHOR_CHAIN.id);
     if (!addr) {
-      setError("On-chain logger address isn't configured. Contact the app owner.");
+      setError("On-chain logger address isn't configured.");
       setPage(3);
       return;
     }
+
     try {
+      // Force switch to X Layer Testnet
       if (chainId !== ANCHOR_CHAIN.id) {
-        setStatus(`Switching your wallet to ${ANCHOR_CHAIN.name}…`);
-        await switchChainAsync({ chainId: ANCHOR_CHAIN.id });
+        setStatus(`Switching wallet to ${ANCHOR_CHAIN.name}... Please confirm in your wallet.`);
+        try {
+          await switchChainAsync({ chainId: ANCHOR_CHAIN.id });
+        } catch (switchErr) {
+          setError(
+            "Please manually switch your OKX Wallet to X Layer Testnet (Chain ID 1952), then try Anchor again."
+          );
+          setPage(3);
+          return;
+        }
+
+        // Give the wallet time to actually update
+        await new Promise((resolve) => setTimeout(resolve, 1500));
       }
 
-      setStatus(`Confirm in your wallet to anchor ${label} on ${ANCHOR_CHAIN.name}…`);
+      // Safety check
+      if (chainId !== ANCHOR_CHAIN.id) {
+        setError(
+          "Wallet is still not on X Layer Testnet. Open OKX Wallet → switch to X Layer Testnet → reconnect → try again."
+        );
+        setPage(3);
+        return;
+      }
+
+      setStatus(`Confirm in your wallet to anchor ${label} on X Layer Testnet...`);
+
       const hash = await writeContractAsync({
         chainId: ANCHOR_CHAIN.id,
         address: addr,
@@ -283,9 +300,8 @@ export function AppShell() {
       });
 
       setTxHash(hash);
-      setStatus(`✅ Anchored ${label} on ${ANCHOR_CHAIN.name}.`);
+      setStatus(`✅ Anchored ${label} on X Layer Testnet.`);
       setPage(3);
-      readLatestRecommendation(ANCHOR_CHAIN.id).then(setLatestOnChain).catch(() => {});
     } catch (e) {
       setError(anchorErrorMessage(e));
       setPage(3);
@@ -387,7 +403,7 @@ export function AppShell() {
         {status && <div className="mb-4 rounded-lg border border-good/40 bg-good/10 p-3 text-sm text-good break-all">{status}</div>}
 
         <div key={page} className="page-enter space-y-6">
-          {/* ------------------------------------------------- 0 · Analyze */}
+          {/* 0 · Analyze */}
           {page === 0 && (
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-panel p-4">
@@ -452,7 +468,7 @@ export function AppShell() {
             </div>
           )}
 
-          {/* ------------------------------------------------- 1 · Results */}
+          {/* 1 · Results */}
           {page === 1 &&
             (analysis ? (
               <div className="space-y-6">
@@ -515,7 +531,7 @@ Raw JSON output
               <EmptyState onGoAnalyze={() => setPage(0)} />
             ))}
 
-          {/* ------------------------------------------------- 2 · Actions */}
+          {/* 2 · Actions */}
           {page === 2 &&
             (analysis ? (
               <div className="space-y-6">
@@ -570,7 +586,7 @@ Raw JSON output
               <EmptyState onGoAnalyze={() => setPage(0)} />
             ))}
 
-          {/* ------------------------------------------ 3 · Wallet & On-chain */}
+          {/* 3 · Wallet */}
           {page === 3 && (
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-panel p-4">

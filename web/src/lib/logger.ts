@@ -3,34 +3,29 @@ import { publicClientFor } from "./rpc";
 
 /**
  * REAL deployed contract on X Layer Testnet (chain 1952):
- *   RWARecommendationLogger @ 0x154D2fc1E2bFDE164691A5d99578cEBb259d4c0F
+ *   0x154D2fc1E2bFDE164691A5d99578cEBb259d4c0F
  *
- * Correct ABI matching the actual contract we deployed.
+ * This contract only has:
+ *   - logRecommendation(string)
+ *   - latestRecommendation() view
  */
 export const LOGGER_ABI = [
   {
     type: "function",
-    name: "anchor",
+    name: "logRecommendation",
     stateMutability: "nonpayable",
-    inputs: [
-      { name: "summary", type: "string" },
-      { name: "symbols", type: "string" },
-      { name: "riskScore", type: "uint8" },
-      { name: "confidence", type: "uint8" },
-    ],
+    inputs: [{ name: "recommendation", type: "string" }],
     outputs: [],
   },
   {
     type: "function",
-    name: "getUserCount",
+    name: "latestRecommendation",
     stateMutability: "view",
-    inputs: [{ name: "user", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
+    inputs: [],
+    outputs: [{ name: "", type: "string" }],
   },
 ] as const;
 
-/** Known testnet deployment (hardcoded so the Anchor button works with zero config).
- *  Env vars override it (e.g. a future mainnet deploy). */
 const TESTNET_LOGGER = "0x154D2fc1E2bFDE164691A5d99578cEBb259d4c0F";
 
 export function loggerAddress(chainId: number): `0x${string}` | undefined {
@@ -54,7 +49,7 @@ export interface AnchorPayload {
   recommendation: string;
 }
 
-/** Kept for compatibility (not used by the new anchor call). */
+/** Pack everything into the single string the real contract accepts */
 export function buildRecommendationString(p: AnchorPayload): string {
   return JSON.stringify({
     app: "X-RWA Agent",
@@ -67,16 +62,26 @@ export function buildRecommendationString(p: AnchorPayload): string {
   });
 }
 
-/** Read is currently not available with the new ABI (no latestRecommendation view). */
 export async function readLatestRecommendation(chainId: number): Promise<string> {
-  return "";
+  const addr = loggerAddress(chainId);
+  if (!addr) return "";
+  try {
+    const client = publicClientFor(chainId);
+    const val = await client.readContract({
+      address: addr,
+      abi: LOGGER_ABI,
+      functionName: "latestRecommendation",
+    });
+    return (val as string) ?? "";
+  } catch {
+    return "";
+  }
 }
 
-/** OKLink explorer link for a transaction hash on the given chain. */
 export function explorerTxUrl(chainId: number, hash: string): string {
   const base =
     chainId === xLayer.id
       ? "https://www.oklink.com/xlayer"
       : "https://www.oklink.com/x-layer-testnet";
   return `\( {base}/tx/ \){hash}`;
-} 
+}

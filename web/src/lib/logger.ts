@@ -1,4 +1,4 @@
-import { xLayer, xLayerTestnet } from "./chains";
+ import { xLayer, xLayerTestnet } from "./chains";
 import { publicClientFor } from "./rpc";
 
 /**

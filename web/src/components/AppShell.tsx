@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useAccount, useChainId, useWriteContract, useSendTransaction, useSwitchChain } from "wagmi";
@@ -16,8 +16,6 @@ import { buildOkxDexSwapUrl, buildSwapUrlForSymbol, actionLabel } from "@/lib/ok
 import { xLayer, xLayerTestnet } from "@/lib/chains";
 import { BottomNav, type NavPage } from "@/components/BottomNav";
 
-/* ---------------------------------------------------------------- shared UI */
-
 const RECO_LABEL: Record<string, string> = { buy: "Buy", hold: "Hold", sell: "Reduce", avoid: "Avoid" };
 const recoLabel = (r: string) => RECO_LABEL[r] ?? r;
 const conf10 = (c: number) => (c > 0 ? Math.max(1, Math.round(c / 10)) : 0);
@@ -31,8 +29,8 @@ function anchorErrorMessage(e: unknown): string {
   if (/user rejected|user denied|rejected the request|\b4001\b/i.test(msg)) {
     return "You cancelled the request in your wallet.";
   }
-  if (/\b4902\b|unrecognized chain|add.*chain|switch/i.test(msg)) {
-    return `Couldn't switch your wallet to ${ANCHOR_CHAIN.name}. Add the network in your wallet and try again.`;
+  if (/\b4902\b|unrecognized chain|add.*chain|switch|wrong network/i.test(msg)) {
+    return "Wallet is on the wrong network. Please switch to X Layer Testnet in OKX Wallet and try again.";
   }
   return msg.length > 180 ? `${msg.slice(0, 180)}…` : msg;
 }
@@ -132,8 +130,6 @@ const EXAMPLE_PROMPTS = [
 ];
 
 const RISK_OPTIONS: RiskTolerance[] = ["conservative", "moderate", "aggressive"];
-
-/* -------------------------------------------------------------------- shell */
 
 export function AppShell() {
   const { address, isConnected } = useAccount();
@@ -237,7 +233,7 @@ export function AppShell() {
     }
   }
 
-  /* ------------------------------------------------- on-chain anchor (real) */
+  /* ------------------------------------------------- on-chain anchor (safer version) */
 
   async function doAnchor(payload: AnchorPayload, label: string) {
     setError(null);
@@ -245,49 +241,31 @@ export function AppShell() {
     setTxHash(null);
 
     if (!isConnected) {
-      setError("Connect your OKX wallet first (top-right), then anchor.");
+      setError("Connect your OKX wallet first, then try Anchor.");
       setPage(3);
       return;
     }
 
-    const addr = loggerAddress(ANCHOR_CHAIN.id);
+    // Hard check: must already be on X Layer Testnet
+    if (chainId !== 1952) {
+      setError(
+        "You are not on X Layer Testnet. Open OKX Wallet → switch network to X Layer Testnet → come back and press Anchor again."
+      );
+      setPage(3);
+      return;
+    }
+
+    const addr = loggerAddress(1952);
     if (!addr) {
-      setError("On-chain logger address isn't configured.");
+      setError("Contract address not found.");
       setPage(3);
       return;
     }
 
     try {
-      // Force switch to X Layer Testnet
-      if (chainId !== ANCHOR_CHAIN.id) {
-        setStatus(`Switching wallet to ${ANCHOR_CHAIN.name}... Please confirm in your wallet.`);
-        try {
-          await switchChainAsync({ chainId: ANCHOR_CHAIN.id });
-        } catch (switchErr) {
-          setError(
-            "Please manually switch your OKX Wallet to X Layer Testnet (Chain ID 1952), then try Anchor again."
-          );
-          setPage(3);
-          return;
-        }
-
-        // Give the wallet time to actually update
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-      }
-
-      // Safety check
-      if (chainId !== ANCHOR_CHAIN.id) {
-        setError(
-          "Wallet is still not on X Layer Testnet. Open OKX Wallet → switch to X Layer Testnet → reconnect → try again."
-        );
-        setPage(3);
-        return;
-      }
-
-      setStatus(`Confirm in your wallet to anchor ${label} on X Layer Testnet...`);
+      setStatus("Confirm the transaction in your OKX Wallet...");
 
       const hash = await writeContractAsync({
-        chainId: ANCHOR_CHAIN.id,
         address: addr,
         abi: LOGGER_ABI,
         functionName: "anchor",
@@ -300,10 +278,17 @@ export function AppShell() {
       });
 
       setTxHash(hash);
-      setStatus(`✅ Anchored ${label} on X Layer Testnet.`);
+      setStatus(`✅ Successfully anchored on X Layer Testnet!`);
       setPage(3);
-    } catch (e) {
-      setError(anchorErrorMessage(e));
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      if (msg.toLowerCase().includes("wrong network") || msg.toLowerCase().includes("chain")) {
+        setError(
+          "Wallet is still detecting the wrong network. Disconnect → switch to X Layer Testnet in OKX Wallet → reconnect → try again."
+        );
+      } else {
+        setError(msg.length > 160 ? msg.slice(0, 160) + "…" : msg);
+      }
       setPage(3);
     }
   }
@@ -336,8 +321,6 @@ export function AppShell() {
       a.symbol,
     );
   }
-
-  /* ----------------------------------------------------- OKX DEX execution */
 
   function openDeepLink(action: SuggestedAction) {
     window.open(buildOkxDexSwapUrl(action, chainId || xLayer.id), "_blank", "noopener");
@@ -403,7 +386,6 @@ export function AppShell() {
         {status && <div className="mb-4 rounded-lg border border-good/40 bg-good/10 p-3 text-sm text-good break-all">{status}</div>}
 
         <div key={page} className="page-enter space-y-6">
-          {/* 0 · Analyze */}
           {page === 0 && (
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-panel p-4">
@@ -413,7 +395,7 @@ export function AppShell() {
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={3}
                   className="mt-2 w-full resize-none rounded-lg border border-border bg-bg p-3 text-sm outline-none focus:border-accent"
-                  placeholder="Ask about tokenized RWAs, e.g. 'Compare TSLAx vs a tokenized T-bill for low risk'"
+                  placeholder="Ask about tokenized RWAs..."
                 />
 
                 <div className="mt-3">
@@ -468,7 +450,6 @@ export function AppShell() {
             </div>
           )}
 
-          {/* 1 · Results */}
           {page === 1 &&
             (analysis ? (
               <div className="space-y-6">
@@ -531,7 +512,6 @@ Raw JSON output
               <EmptyState onGoAnalyze={() => setPage(0)} />
             ))}
 
-          {/* 2 · Actions */}
           {page === 2 &&
             (analysis ? (
               <div className="space-y-6">
@@ -586,7 +566,6 @@ Raw JSON output
               <EmptyState onGoAnalyze={() => setPage(0)} />
             ))}
 
-          {/* 3 · Wallet */}
           {page === 3 && (
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-panel p-4">
@@ -622,7 +601,6 @@ Raw JSON output
                         <span className="font-mono">{Number(h.balance).toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>
                       </div>
                     ))}
-                    <p className="pt-1 text-xs text-muted">Tokenized-stock balances appear here once their X Layer addresses are verified in the token registry.</p>
                   </div>
                 )}
               </div>
@@ -639,15 +617,9 @@ Raw JSON output
                   {txHash && (
                     <div className="flex justify-between gap-3">
                       <span className="text-muted">Last anchor tx</span>
-                      <a href={explorerTxUrl(ANCHOR_CHAIN.id, txHash)} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-accent hover:underline break-all">
+                      <a href={explorerTxUrl(1952, txHash)} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-accent hover:underline break-all">
                         {txHash.slice(0, 10)}… ↗
                       </a>
-                    </div>
-                  )}
-                  {latestOnChain && (
-                    <div className="pt-1">
-                      <div className="text-muted">Latest recommendation on-chain</div>
-                      <pre className="mt-1 overflow-x-auto rounded-lg bg-bg p-2 text-xs text-muted">{latestOnChain}</pre>
                     </div>
                   )}
                   <a href={explorer} target="_blank" rel="noopener noreferrer" className="inline-block pt-1 text-xs text-accent hover:underline">
@@ -655,8 +627,7 @@ Raw JSON output
                   </a>
                 </div>
                 <p className="mt-3 text-xs text-muted">
-                  “Anchor on X Layer” calls <span className="text-white">anchor(...)</span> on the real
-                  RWARecommendationLogger contract, storing the analysis so anyone can read it back on-chain. No funds are ever held.
+                  “Anchor on X Layer” calls <span className="text-white">anchor(...)</span> on the real contract. No funds are held.
                 </p>
               </div>
             </div>

@@ -4,9 +4,11 @@
 
 html,
 body {
-  background-color: #0a0b0f;
+  background: linear-gradient(160deg, #070b14 0%, #0c1220 40%, #0f1528 100%);
+  background-attachment: fixed;
   color: #e6e8ef;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
 /* Tab transition for the mobile-style paged shell. */

@@ -5,15 +5,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: "#0a0b0f",
-        panel: "#12141c",
-        panel2: "#1a1d28",
-        border: "#262a38",
-        accent: "#5b8cff",
-        good: "#3ddc97",
-        warn: "#ffcc66",
-        bad: "#ff6b6b",
-        muted: "#8b91a7",
+        bg: "#070b14",
+        panel: "#0f1422",
+        panel2: "#161c2e",
+        border: "#24304a",
+        accent: "#3b9eff",       // brighter electric blue
+        good: "#34d399",
+        warn: "#fbbf24",
+        bad: "#f87171",
+        muted: "#94a3b8",
+      },
+      boxShadow: {
+        glow: "0 0 20px rgba(59, 158, 255, 0.15)",
       },
     },
   },

@@ -14,7 +14,7 @@ export const runtime = "nodejs";
  * tool_choice pinned to it. The model cannot return prose — only structured args.
  */
 const AI_BASE_URL = process.env.AI_BASE_URL ?? "https://api.groq.com/openai/v1";
-const AI_MODEL = process.env.AI_MODEL ?? "llama-3.3-70b-versatile";
+const AI_MODEL = process.env.AI_MODEL ?? "llama-3.1-8b-instant";
 
 /**
  * Groq validates the model's tool call against the tool's JSON schema on THEIR
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
   if (!prompt) return NextResponse.json({ error: "Missing 'prompt'" }, { status: 400 });
 
   const userContent = body.context
-    ? `${prompt}\n\nContext (JSON):\n${JSON.stringify(body.context).slice(0, 6000)}`
+    ? `\( {prompt}\n\nContext (JSON):\n \){JSON.stringify(body.context).slice(0, 6000)}`
     : prompt;
 
   const requestBody = JSON.stringify({

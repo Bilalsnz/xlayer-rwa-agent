@@ -83,5 +83,5 @@ export function explorerTxUrl(chainId: number, hash: string): string {
     chainId === xLayer.id
       ? "https://www.oklink.com/xlayer"
       : "https://www.oklink.com/x-layer-testnet";
-  return `\( {base}/tx/ \){hash}`;
+  return base + "/tx/" + hash;
 }

@@ -7,11 +7,13 @@ import {
   useWriteContract,
   useSendTransaction,
 } from "wagmi";
+
 import type {
   AssetAnalysis,
   RWAAnalysis,
   SuggestedAction,
 } from "@/lib/schema";
+
 import {
   LOGGER_ABI,
   loggerAddress,
@@ -20,16 +22,19 @@ import {
   explorerTxUrl,
   type AnchorPayload,
 } from "@/lib/logger";
+
 import {
   readHoldings,
   holdingsSummary,
   type Holding,
 } from "@/lib/holdings";
+
 import {
   buildOkxDexSwapUrl,
   buildSwapUrlForSymbol,
   actionLabel,
 } from "@/lib/okxDex";
+
 import { xLayer, xLayerTestnet } from "@/lib/chains";
 import { BottomNav, type NavPage } from "@/components/BottomNav";
 
@@ -88,15 +93,20 @@ function Meter({
 
   return (
     <div>
-      <div className="flex items-center justify-between text-xs">
+      <div className="flex items-center justify-between text-[11px]">
         <span className="text-muted">{label}</span>
 
-        <span className={`font-semibold ${scoreColor(safeValue, invert)}`}>
+        <span
+          className={`font-semibold ${scoreColor(
+            safeValue,
+            invert,
+          )}`}
+        >
           {Math.round(safeValue)}
         </span>
       </div>
 
-      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-panel2">
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-panel2">
         <div
           className={`h-full rounded-full transition-all ${scoreBarClass(
             safeValue,
@@ -111,10 +121,33 @@ function Meter({
 
 function AnchorBadge() {
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent">
+    <div className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-[10px] font-medium text-accent">
       <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_currentColor]" />
-      Live on X Layer Testnet
+      X Layer Testnet
     </div>
+  );
+}
+
+function RecommendationBadge({
+  recommendation,
+}: {
+  recommendation: string;
+}) {
+  const r = recommendation.toLowerCase();
+
+  const classes =
+    r === "buy"
+      ? "border-good/30 bg-good/10 text-good"
+      : r === "sell" || r === "avoid"
+        ? "border-bad/30 bg-bad/10 text-bad"
+        : "border-warn/30 bg-warn/10 text-warn";
+
+  return (
+    <span
+      className={`rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${classes}`}
+    >
+      {recoLabel(recommendation)}
+    </span>
   );
 }
 
@@ -128,63 +161,91 @@ function AssetCard({
   onSwap: (a: AssetAnalysis) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-panel p-4 shadow-[0_0_24px_rgba(59,158,255,0.04)]">
+    <div className="group rounded-2xl border border-border bg-panel p-4 transition hover:border-accent/30 hover:shadow-[0_0_30px_rgba(59,158,255,0.06)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-semibold">{a.symbol}</div>
-          <div className="text-xs text-muted">{a.name}</div>
+          <div className="text-lg font-semibold tracking-tight">
+            {a.symbol}
+          </div>
+
+          <div className="mt-0.5 text-xs text-muted">
+            {a.name}
+          </div>
         </div>
 
-        <span className="rounded-md border border-border bg-panel2 px-2 py-1 text-xs uppercase">
-          {recoLabel(a.recommendation)} · {conf10(a.confidence)}/10
-        </span>
+        <RecommendationBadge
+          recommendation={a.recommendation}
+        />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
-        <Meter label="Risk" value={a.risk_score} invert />
-        <Meter label="Liquidity" value={a.liquidity_score} />
-        <Meter label="Yield" value={a.yield_potential} />
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4">
+        <Meter
+          label="Risk"
+          value={a.risk_score}
+          invert
+        />
+
+        <Meter
+          label="Liquidity"
+          value={a.liquidity_score}
+        />
+
+        <Meter
+          label="Yield"
+          value={a.yield_potential}
+        />
+
         <Meter
           label="Sentiment"
           value={(a.sentiment_score + 100) / 2}
         />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div>
-          <div className="mb-1 text-muted">Why this stands out</div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Opportunity
+          </div>
 
-          <ul className="list-disc space-y-1 pl-4 text-good/90">
+          <ul className="space-y-1.5 text-xs leading-5 text-good/90">
             {a.key_opportunities.map((r, i) => (
-              <li key={i}>{r}</li>
+              <li key={i} className="flex gap-2">
+                <span className="text-good">+</span>
+                <span>{r}</span>
+              </li>
             ))}
           </ul>
         </div>
 
         <div>
-          <div className="mb-1 text-muted">Risk notes</div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Risk factors
+          </div>
 
-          <ul className="list-disc space-y-1 pl-4 text-bad/90">
+          <ul className="space-y-1.5 text-xs leading-5 text-bad/90">
             {a.key_risks.map((r, i) => (
-              <li key={i}>{r}</li>
+              <li key={i} className="flex gap-2">
+                <span className="text-bad">!</span>
+                <span>{r}</span>
+              </li>
             ))}
           </ul>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
         <button
           onClick={() => onSwap(a)}
-          className="rounded-lg bg-good px-3 py-1.5 text-xs font-medium text-black transition hover:opacity-90"
+          className="rounded-lg bg-good px-3 py-2 text-xs font-semibold text-black transition hover:opacity-90"
         >
-          Swap on OKX DEX
+          Trade on OKX
         </button>
 
         <button
           onClick={() => onAnchor(a)}
-          className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition hover:border-accent hover:bg-accent/20"
+          className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs font-medium text-accent transition hover:border-accent hover:bg-accent/20"
         >
-          ⚓ Anchor on X Layer
+          ⚓ Anchor
         </button>
       </div>
     </div>
@@ -197,14 +258,25 @@ function EmptyState({
   onGoAnalyze: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-dashed border-border bg-panel/50 p-8 text-center">
-      <p className="text-sm text-muted">No analysis yet.</p>
+    <div className="rounded-2xl border border-dashed border-border bg-panel/60 p-10 text-center">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10 text-xl text-accent">
+        ◈
+      </div>
+
+      <div className="mt-4 text-sm font-semibold">
+        No analysis yet
+      </div>
+
+      <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted">
+        Ask X-RWA Agent about a tokenized equity,
+        ETF, T-bill or portfolio allocation.
+      </p>
 
       <button
         onClick={onGoAnalyze}
-        className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+        className="mt-5 rounded-xl bg-accent px-4 py-2.5 text-xs font-semibold text-white hover:opacity-90"
       >
-        Go to Analyze
+        Start analysis →
       </button>
     </div>
   );
@@ -241,6 +313,7 @@ export function AppShell() {
 
   const [rawJson, setRawJson] = useState<string>("");
   const [loading, setLoading] = useState(false);
+
   const [error, setError] =
     useState<string | null>(null);
 
@@ -268,9 +341,20 @@ export function AppShell() {
 
   const PAGES: NavPage[] = [
     { id: 0, label: "Analyze" },
-    { id: 1, label: "Results", hasData: !!analysis },
-    { id: 2, label: "Actions", hasData: !!analysis },
-    { id: 3, label: "Wallet" },
+    {
+      id: 1,
+      label: "Results",
+      hasData: !!analysis,
+    },
+    {
+      id: 2,
+      label: "Actions",
+      hasData: !!analysis,
+    },
+    {
+      id: 3,
+      label: "Wallet",
+    },
   ];
 
   function goto(id: number) {
@@ -303,7 +387,9 @@ export function AppShell() {
         if (!cancelled) setHoldings([]);
       })
       .finally(() => {
-        if (!cancelled) setHoldingsLoading(false);
+        if (!cancelled) {
+          setHoldingsLoading(false);
+        }
       });
 
     return () => {
@@ -382,9 +468,11 @@ export function AppShell() {
         "/api/analyze",
         {
           method: "POST",
+
           headers: {
             "Content-Type": "application/json",
           },
+
           body: JSON.stringify({
             prompt,
             context,
@@ -421,10 +509,6 @@ export function AppShell() {
       setLoading(false);
     }
   }
-
-  /* -------------------------------------------------
-     ON-CHAIN ANCHOR
-  ------------------------------------------------- */
 
   async function doAnchor(
     payload: AnchorPayload,
@@ -535,19 +619,16 @@ export function AppShell() {
       const hash =
         await writeContractAsync({
           address: addr,
-
           abi: LOGGER_ABI,
-
           functionName:
             "logRecommendation",
-
           args: [recString],
         });
 
       setTxHash(hash);
 
       setStatus(
-        "✅ Successfully anchored on X Layer Testnet!",
+        "Successfully anchored on X Layer Testnet!",
       );
 
       setPage(3);
@@ -561,7 +642,7 @@ export function AppShell() {
     }
 
     setStatus(
-      `✅ Demo Mode — Analysis would be anchored on X Layer Testnet
+      `Demo Mode — Analysis would be anchored on X Layer Testnet
 
 Contract: ${addr}
 
@@ -613,7 +694,6 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
             "hold",
         ),
       },
-
       "this analysis",
     );
   }
@@ -637,7 +717,6 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
           a.recommendation,
         ),
       },
-
       a.symbol,
     );
   }
@@ -684,10 +763,12 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
         "/api/okx",
         {
           method: "POST",
+
           headers: {
             "Content-Type":
               "application/json",
           },
+
           body: JSON.stringify({
             action: "swap",
 
@@ -770,207 +851,450 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
       : xLayerTestnet.blockExplorers
           .default.url;
 
+  const averageConfidence =
+    analysis?.assets_analyzed.length
+      ? Math.round(
+          analysis.assets_analyzed.reduce(
+            (sum, a) =>
+              sum + a.confidence,
+            0,
+          ) /
+            analysis.assets_analyzed
+              .length,
+        )
+      : 0;
+
+  const averageRisk =
+    analysis?.assets_analyzed.length
+      ? Math.round(
+          analysis.assets_analyzed.reduce(
+            (sum, a) =>
+              sum + a.risk_score,
+            0,
+          ) /
+            analysis.assets_analyzed
+              .length,
+        )
+      : 0;
+
   return (
     <>
       <div
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
+        className="pb-4"
       >
         {error && (
-          <div className="mb-4 rounded-lg border border-bad/40 bg-bad/10 p-3 text-sm text-bad break-all">
+          <div className="mb-4 rounded-xl border border-bad/40 bg-bad/10 p-3 text-xs leading-5 text-bad break-all">
             {error}
           </div>
         )}
 
         {status && (
-          <div className="mb-4 rounded-xl border border-good/40 bg-good/10 p-4 text-sm text-good break-all whitespace-pre-line shadow-[0_0_24px_rgba(61,220,151,0.08)]">
+          <div className="mb-4 rounded-xl border border-good/40 bg-good/10 p-4 text-xs leading-5 text-good break-all whitespace-pre-line">
             {status}
           </div>
         )}
 
         <div
           key={page}
-          className="page-enter space-y-6"
+          className="page-enter space-y-5"
         >
-          {/* =========================
+          {/* =====================================================
               ANALYZE
-          ========================== */}
+          ====================================================== */}
 
           {page === 0 && (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-border bg-panel p-4 shadow-[0_0_28px_rgba(59,158,255,0.04)]">
-                <div className="text-xs uppercase tracking-wide text-muted">
-                  Ask the analyst
+            <div className="space-y-5">
+              <div className="relative overflow-hidden rounded-3xl border border-accent/20 bg-panel p-5 shadow-[0_0_45px_rgba(59,158,255,0.08)]">
+                <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-accent/10 blur-3xl" />
+
+                <div className="pointer-events-none absolute -bottom-24 -left-20 h-40 w-40 rounded-full bg-purple-500/10 blur-3xl" />
+
+                <div className="relative">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-good shadow-[0_0_10px_currentColor]" />
+
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-good">
+                          AI RWA Analyst
+                        </span>
+                      </div>
+
+                      <h1 className="mt-3 text-2xl font-semibold tracking-tight">
+                        X-RWA Agent
+                      </h1>
+
+                      <p className="mt-1 max-w-md text-sm leading-6 text-muted">
+                        Analyze tokenized equities,
+                        ETFs and real-world assets
+                        with structured AI
+                        intelligence on X Layer.
+                      </p>
+                    </div>
+
+                    <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10 text-xl text-accent shadow-[0_0_25px_rgba(59,158,255,0.12)] sm:flex">
+                      ◈
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {[
+                      "Tokenized Equities",
+                      "ETFs",
+                      "T-Bills",
+                      "X Layer",
+                    ].map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-border bg-bg/60 px-3 py-1.5 text-[10px] text-muted"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-panel p-4 shadow-[0_0_30px_rgba(59,158,255,0.04)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                      Ask the analyst
+                    </div>
+
+                    <div className="mt-1 text-sm">
+                      What should X-RWA Agent analyze?
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-good/20 bg-good/5 px-2 py-1 text-[9px] font-semibold text-good">
+                    AI READY
+                  </div>
                 </div>
 
                 <textarea
                   value={prompt}
                   onChange={(e) =>
-                    setPrompt(
-                      e.target.value,
-                    )
+                    setPrompt(e.target.value)
                   }
-                  rows={3}
-                  className="mt-2 w-full resize-none rounded-lg border border-border bg-bg p-3 text-sm outline-none focus:border-accent"
+                  rows={4}
+                  className="mt-4 w-full resize-none rounded-xl border border-border bg-bg p-4 text-sm leading-6 outline-none transition placeholder:text-muted/60 focus:border-accent/60 focus:ring-1 focus:ring-accent/20"
                   placeholder="Ask about tokenized RWAs..."
                 />
 
-                <div className="mt-3">
-                  <div className="text-xs uppercase tracking-wide text-muted">
-                    Risk tolerance
+                <div className="mt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+                        Risk tolerance
+                      </div>
+
+                      <div className="mt-1 text-[11px] text-muted">
+                        Adjust how aggressively the
+                        analyst evaluates opportunities.
+                      </div>
+                    </div>
+
+                    <span className="hidden text-xs capitalize text-accent sm:block">
+                      {riskTolerance}
+                    </span>
                   </div>
 
-                  <div className="mt-1 inline-flex rounded-lg border border-border bg-bg p-0.5">
-                    {RISK_OPTIONS.map(
-                      (r) => (
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {RISK_OPTIONS.map((r) => {
+                      const active =
+                        riskTolerance === r;
+
+                      return (
                         <button
                           key={r}
                           onClick={() =>
-                            setRiskTolerance(
-                              r,
-                            )
+                            setRiskTolerance(r)
                           }
-                          className={`rounded-md px-3 py-1 text-xs capitalize ${
-                            riskTolerance ===
-                            r
-                              ? "bg-accent text-white"
-                              : "text-muted hover:text-white"
+                          className={`rounded-xl border px-3 py-2.5 text-xs font-medium capitalize transition ${
+                            active
+                              ? "border-accent/60 bg-accent/15 text-accent shadow-[0_0_18px_rgba(59,158,255,0.08)]"
+                              : "border-border bg-bg text-muted hover:text-white"
                           }`}
                         >
                           {r}
                         </button>
-                      ),
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-3">
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                   <button
-                    onClick={
-                      runAnalysis
-                    }
+                    onClick={runAnalysis}
                     disabled={
                       loading ||
                       !prompt.trim()
                     }
-                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white shadow-[0_0_18px_rgba(59,158,255,0.2)] transition hover:opacity-90 disabled:opacity-50"
+                    className="w-full rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white shadow-[0_0_25px_rgba(59,158,255,0.2)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
                   >
-                    {loading
-                      ? "Analyzing…"
-                      : "Analyze"}
+                    {loading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Analyzing RWA data…
+                      </span>
+                    ) : (
+                      "Analyze →"
+                    )}
                   </button>
 
                   {isConnected ? (
-                    <span className="text-xs text-muted">
-                      Using your holdings:{" "}
+                    <div className="flex items-center gap-2 text-[11px] text-muted">
+                      <span className="h-1.5 w-1.5 rounded-full bg-good" />
+                      Wallet connected
                       <span className="text-white">
+                        ·{" "}
                         {holdingsLoading
-                          ? "reading…"
+                          ? "Reading holdings…"
                           : holdingsSummary(
                               holdings,
                             )}
                       </span>
-                    </span>
+                    </div>
                   ) : (
-                    <span className="text-xs text-muted">
-                      Connect a wallet to
-                      personalize with your
-                      real holdings.
-                    </span>
+                    <div className="flex items-center gap-2 text-[11px] text-muted">
+                      <span className="h-1.5 w-1.5 rounded-full bg-warn" />
+                      Connect wallet for personalized
+                      analysis
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border bg-panel p-4">
-                <div className="text-xs uppercase tracking-wide text-muted">
-                  Try an example
+              <div className="rounded-2xl border border-border bg-panel p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                      Quick analysis
+                    </div>
+
+                    <div className="mt-1 text-xs text-muted">
+                      Start with a predefined RWA
+                      research question.
+                    </div>
+                  </div>
+
+                  <span className="text-[10px] text-muted">
+                    3 examples
+                  </span>
                 </div>
 
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-3 space-y-2">
                   {EXAMPLE_PROMPTS.map(
-                    (ex) => (
+                    (ex, index) => (
                       <button
                         key={ex}
                         onClick={() =>
                           setPrompt(ex)
                         }
-                        className="rounded-full border border-border bg-panel2 px-3 py-1.5 text-xs text-muted hover:text-white"
+                        className="group flex w-full items-center gap-3 rounded-xl border border-border bg-bg p-3 text-left transition hover:border-accent/30 hover:bg-accent/5"
                       >
-                        {ex}
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border bg-panel2 text-[10px] font-semibold text-accent">
+                          0{index + 1}
+                        </span>
+
+                        <span className="flex-1 text-xs leading-5 text-muted group-hover:text-white">
+                          {ex}
+                        </span>
+
+                        <span className="text-muted group-hover:text-accent">
+                          →
+                        </span>
                       </button>
                     ),
                   )}
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  ["01", "Structured analysis"],
+                  ["02", "Risk scoring"],
+                  ["03", "Portfolio context"],
+                  ["04", "On-chain actions"],
+                ].map(([num, label]) => (
+                  <div
+                    key={num}
+                    className="rounded-xl border border-border bg-panel/70 p-3"
+                  >
+                    <div className="text-[10px] font-semibold text-accent">
+                      {num}
+                    </div>
+
+                    <div className="mt-1 text-[11px] text-muted">
+                      {label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="px-1 text-center text-[10px] leading-5 text-muted">
+                X-RWA Agent provides analytical
+                information only. Not financial advice.
+              </div>
             </div>
           )}
 
-          {/* =========================
+          {/* =====================================================
               RESULTS
-          ========================== */}
+          ====================================================== */}
 
           {page === 1 &&
             (analysis ? (
-              <div className="space-y-6">
-                <div className="rounded-2xl border border-border bg-panel p-4 shadow-[0_0_28px_rgba(59,158,255,0.05)]">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs uppercase tracking-wide text-muted">
-                        AI recommendation
-                      </div>
-
-                      <div className="mt-2">
-                        <AnchorBadge />
-                      </div>
+              <div className="space-y-5">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                      AI intelligence
                     </div>
 
-                    <button
-                      onClick={
-                        anchorAnalysis
-                      }
-                      className="rounded-lg border border-accent/50 bg-accent px-3 py-2 text-xs font-semibold text-white shadow-[0_0_20px_rgba(59,158,255,0.25)] transition hover:opacity-90"
-                    >
-                      ⚓ Anchor on X Layer
-                    </button>
+                    <h2 className="mt-1 text-xl font-semibold">
+                      Analysis results
+                    </h2>
                   </div>
 
-                  <p className="mt-4 text-sm leading-6">
-                    {analysis.summary}
-                  </p>
+                  <AnchorBadge />
                 </div>
 
-                {analysis.assets_analyzed
-                  .length > 1 && (
-                  <div className="rounded-xl border border-border bg-panel p-4">
-                    <div className="text-xs uppercase tracking-wide text-muted">
-                      Comparison
+                <div className="relative overflow-hidden rounded-3xl border border-accent/20 bg-panel p-5 shadow-[0_0_40px_rgba(59,158,255,0.07)]">
+                  <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-accent/10 blur-3xl" />
+
+                  <div className="relative">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                          AI verdict
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className="text-2xl font-semibold">
+                            {recoLabel(
+                              analysis
+                                .assets_analyzed[0]
+                                ?.recommendation ??
+                                "hold",
+                            )}
+                          </span>
+
+                          <span className="rounded-lg border border-accent/20 bg-accent/10 px-2 py-1 text-[10px] text-accent">
+                            {averageConfidence > 0
+                              ? `${conf10(
+                                  averageConfidence,
+                                )}/10 confidence`
+                              : "AI assessment"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={
+                          anchorAnalysis
+                        }
+                        className="rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/20"
+                      >
+                        ⚓ Anchor analysis
+                      </button>
                     </div>
 
-                    <div className="mt-2 overflow-x-auto">
-                      <table className="w-full text-sm">
+                    <p className="mt-5 max-w-3xl text-sm leading-7 text-muted">
+                      {analysis.summary}
+                    </p>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="rounded-xl border border-border bg-bg/60 p-3">
+                        <div className="text-[9px] uppercase tracking-wide text-muted">
+                          Assets
+                        </div>
+
+                        <div className="mt-1 text-lg font-semibold">
+                          {
+                            analysis
+                              .assets_analyzed
+                              .length
+                          }
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-bg/60 p-3">
+                        <div className="text-[9px] uppercase tracking-wide text-muted">
+                          Confidence
+                        </div>
+
+                        <div className="mt-1 text-lg font-semibold text-accent">
+                          {conf10(
+                            averageConfidence,
+                          )}
+                          /10
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-bg/60 p-3">
+                        <div className="text-[9px] uppercase tracking-wide text-muted">
+                          Risk
+                        </div>
+
+                        <div
+                          className={`mt-1 text-lg font-semibold ${scoreColor(
+                            averageRisk,
+                            true,
+                          )}`}
+                        >
+                          {averageRisk}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-bg/60 p-3">
+                        <div className="text-[9px] uppercase tracking-wide text-muted">
+                          Profile
+                        </div>
+
+                        <div className="mt-1 text-sm font-semibold capitalize text-white">
+                          {riskTolerance}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {analysis.assets_analyzed.length >
+                  1 && (
+                  <div className="rounded-2xl border border-border bg-panel p-4">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                      Asset comparison
+                    </div>
+
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full min-w-[560px] text-xs">
                         <thead>
-                          <tr className="text-left text-xs text-muted">
-                            <th className="py-1 pr-3">
+                          <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+                            <th className="py-2 pr-3">
                               Asset
                             </th>
 
-                            <th className="py-1 pr-3">
+                            <th className="py-2 pr-3">
                               Call
                             </th>
 
-                            <th className="py-1 pr-3">
-                              Conf.
+                            <th className="py-2 pr-3">
+                              Confidence
                             </th>
 
-                            <th className="py-1 pr-3">
+                            <th className="py-2 pr-3">
                               Risk
                             </th>
 
-                            <th className="py-1 pr-3">
-                              Liq.
+                            <th className="py-2 pr-3">
+                              Liquidity
                             </th>
 
-                            <th className="py-1 pr-3">
+                            <th className="py-2">
                               Yield
                             </th>
                           </tr>
@@ -980,24 +1304,22 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                           {analysis.assets_analyzed.map(
                             (a) => (
                               <tr
-                                key={
-                                  a.symbol
-                                }
+                                key={a.symbol}
                                 className="border-t border-border"
                               >
-                                <td className="py-1.5 pr-3 font-medium">
-                                  {
-                                    a.symbol
-                                  }
+                                <td className="py-3 pr-3 font-semibold">
+                                  {a.symbol}
                                 </td>
 
-                                <td className="py-1.5 pr-3">
-                                  {recoLabel(
-                                    a.recommendation,
-                                  )}
+                                <td className="py-3 pr-3">
+                                  <RecommendationBadge
+                                    recommendation={
+                                      a.recommendation
+                                    }
+                                  />
                                 </td>
 
-                                <td className="py-1.5 pr-3">
+                                <td className="py-3 pr-3">
                                   {conf10(
                                     a.confidence,
                                   )}
@@ -1005,7 +1327,7 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                                 </td>
 
                                 <td
-                                  className={`py-1.5 pr-3 font-medium ${scoreColor(
+                                  className={`py-3 pr-3 font-semibold ${scoreColor(
                                     a.risk_score,
                                     true,
                                   )}`}
@@ -1016,7 +1338,7 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                                 </td>
 
                                 <td
-                                  className={`py-1.5 pr-3 font-medium ${scoreColor(
+                                  className={`py-3 pr-3 font-semibold ${scoreColor(
                                     a.liquidity_score,
                                   )}`}
                                 >
@@ -1026,7 +1348,7 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                                 </td>
 
                                 <td
-                                  className={`py-1.5 pr-3 font-medium ${scoreColor(
+                                  className={`py-3 font-semibold ${scoreColor(
                                     a.yield_potential,
                                   )}`}
                                 >
@@ -1043,40 +1365,44 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                   </div>
                 )}
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  {analysis.assets_analyzed.map(
-                    (a) => (
-                      <AssetCard
-                        key={a.symbol}
-                        a={a}
-                        onAnchor={
-                          anchorAsset
-                        }
-                        onSwap={
-                          swapSymbol
-                        }
-                      />
-                    ),
-                  )}
+                <div>
+                  <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                    Asset intelligence
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {analysis.assets_analyzed.map(
+                      (a) => (
+                        <AssetCard
+                          key={a.symbol}
+                          a={a}
+                          onAnchor={
+                            anchorAsset
+                          }
+                          onSwap={
+                            swapSymbol
+                          }
+                        />
+                      ),
+                    )}
+                  </div>
                 </div>
 
-                {/* RAW JSON COLLAPSED */}
-
-                <details className="rounded-xl border border-border bg-panel">
-                  <summary className="cursor-pointer list-none p-4 text-sm font-medium text-muted transition hover:text-white">
-                    <span className="flex items-center justify-between">
+                <details className="rounded-2xl border border-border bg-panel">
+                  <summary className="cursor-pointer list-none p-4 text-xs text-muted hover:text-white">
+                    <div className="flex items-center justify-between">
                       <span>
-                        View raw analysis data
+                        Developer / API data
                       </span>
 
-                      <span className="text-xs text-muted">
-                        Developer data
+                      <span className="text-[10px]">
+                        JSON
                       </span>
-                    </span>
+                    </div>
                   </summary>
 
                   <div className="border-t border-border p-4">
-                    <pre className="overflow-x-auto rounded-lg bg-bg p-3 text-xs leading-5 text-muted">
+                    <pre className="overflow-x-auto rounded-xl bg-bg p-3 text-[10px] leading-5 text-muted">
                       {rawJson}
                     </pre>
                   </div>
@@ -1090,28 +1416,52 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
               />
             ))}
 
-          {/* =========================
+          {/* =====================================================
               ACTIONS
-          ========================== */}
+          ====================================================== */}
 
           {page === 2 &&
             (analysis ? (
-              <div className="space-y-6">
-                <div className="rounded-xl border border-border bg-panel p-4">
-                  <div className="text-xs uppercase tracking-wide text-muted">
-                    Suggested portfolio
+              <div className="space-y-5">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                    Execution layer
                   </div>
 
-                  <div className="mt-2 flex h-3 w-full overflow-hidden rounded-full">
+                  <h2 className="mt-1 text-xl font-semibold">
+                    Portfolio actions
+                  </h2>
+
+                  <p className="mt-1 text-xs text-muted">
+                    Turn the analyst's assessment into
+                    actionable portfolio decisions.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-panel p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                        Suggested allocation
+                      </div>
+
+                      <div className="mt-1 text-sm font-medium">
+                        AI portfolio structure
+                      </div>
+                    </div>
+
+                    <span className="rounded-lg border border-accent/20 bg-accent/10 px-2 py-1 text-[10px] text-accent">
+                      {riskTolerance}
+                    </span>
+                  </div>
+
+                  <div className="mt-5 flex h-4 w-full overflow-hidden rounded-full bg-bg">
                     {Object.entries(
                       analysis
                         .portfolio_suggestion
                         .allocation,
                     ).map(
-                      (
-                        [sym, pct],
-                        i,
-                      ) => (
+                      ([sym, pct], i) => (
                         <div
                           key={sym}
                           title={`${sym}: ${pct}%`}
@@ -1133,74 +1483,107 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                     )}
                   </div>
 
-                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted">
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
                     {Object.entries(
                       analysis
                         .portfolio_suggestion
                         .allocation,
                     ).map(
                       ([sym, pct]) => (
-                        <span key={sym}>
-                          {sym} {pct}%
-                        </span>
+                        <div
+                          key={sym}
+                          className="flex items-center justify-between rounded-xl border border-border bg-bg p-3"
+                        >
+                          <span className="text-xs font-medium">
+                            {sym}
+                          </span>
+
+                          <span className="text-sm font-semibold text-accent">
+                            {pct}%
+                          </span>
+                        </div>
                       ),
                     )}
                   </div>
 
-                  <p className="mt-2 text-sm text-muted">
-                    {
-                      analysis
-                        .portfolio_suggestion
-                        .rationale
-                    }
-                  </p>
+                  <div className="mt-4 rounded-xl border border-border bg-bg p-3">
+                    <div className="text-[10px] uppercase tracking-wide text-muted">
+                      Analyst rationale
+                    </div>
+
+                    <p className="mt-2 text-xs leading-5 text-muted">
+                      {
+                        analysis
+                          .portfolio_suggestion
+                          .rationale
+                      }
+                    </p>
+                  </div>
                 </div>
 
-                <div className="rounded-xl border border-border bg-panel p-4">
-                  <div className="text-xs uppercase tracking-wide text-muted">
+                <div className="rounded-2xl border border-border bg-panel p-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
                     Suggested actions
                   </div>
 
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-3 space-y-2">
                     {analysis.suggested_actions.map(
                       (act, i) => (
                         <div
                           key={i}
-                          className="flex items-center justify-between gap-3 rounded-lg border border-border bg-panel2 p-3"
+                          className="rounded-xl border border-border bg-bg p-4"
                         >
-                          <div className="text-sm">
-                            <div className="font-medium">
-                              {actionLabel(
-                                act,
-                              )}
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold">
+                                {actionLabel(
+                                  act,
+                                )}
+                              </div>
+
+                              <div className="mt-1 text-xs leading-5 text-muted">
+                                {
+                                  act.reason
+                                }
+                              </div>
                             </div>
 
-                            <div className="text-xs text-muted">
-                              {
-                                act.reason
-                              }
-                            </div>
+                            {act.action ===
+                            "swap" ? (
+                              <button
+                                onClick={() =>
+                                  execute(
+                                    act,
+                                  )
+                                }
+                                className="shrink-0 rounded-lg bg-good px-3 py-2 text-[10px] font-semibold text-black transition hover:opacity-90"
+                              >
+                                Execute
+                              </button>
+                            ) : (
+                              <span className="shrink-0 rounded-lg border border-border px-3 py-2 text-[10px] text-muted">
+                                {act.action}
+                              </span>
+                            )}
                           </div>
 
                           {act.action ===
-                          "swap" ? (
-                            <button
-                              onClick={() =>
-                                execute(
-                                  act,
-                                )
-                              }
-                              className="shrink-0 rounded-lg bg-good px-3 py-1.5 text-xs font-medium text-black hover:opacity-90"
-                            >
-                              Swap on
-                              OKX DEX
-                            </button>
-                          ) : (
-                            <span className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-muted">
-                              {
-                                act.action
-                              }
-                            </span>
+                            "swap" && (
+                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-muted">
+                              <span className="rounded-md bg-panel2 px-2 py-1">
+                                From:{" "}
+                                {act.from_token}
+                              </span>
+
+                              <span className="rounded-md bg-panel2 px-2 py-1">
+                                To:{" "}
+                                {act.to_token}
+                              </span>
+
+                              <span className="rounded-md bg-panel2 px-2 py-1">
+                                ${act.amount_usd}
+                              </span>
+                            </div>
                           )}
                         </div>
                       ),
@@ -1208,7 +1591,27 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                   </div>
                 </div>
 
-                <p className="text-xs text-muted">
+                <div className="rounded-xl border border-accent/20 bg-accent/5 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-accent">
+                    <span>◈</span>
+                    On-chain intelligence
+                  </div>
+
+                  <p className="mt-2 text-[11px] leading-5 text-muted">
+                    Analysis can be anchored to X Layer
+                    Testnet as verifiable recommendation
+                    data.
+                  </p>
+
+                  <button
+                    onClick={anchorAnalysis}
+                    className="mt-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-[10px] font-semibold text-accent hover:bg-accent/20"
+                  >
+                    ⚓ Anchor this analysis
+                  </button>
+                </div>
+
+                <p className="text-center text-[10px] leading-5 text-muted">
                   {analysis.disclaimer}
                 </p>
               </div>
@@ -1220,143 +1623,230 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
               />
             ))}
 
-          {/* =========================
+          {/* =====================================================
               WALLET
-          ========================== */}
+          ====================================================== */}
 
           {page === 3 && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-border bg-panel p-4">
-                <div className="text-xs uppercase tracking-wide text-muted">
-                  Wallet
+            <div className="space-y-5">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                  Portfolio intelligence
                 </div>
 
-                {isConnected ? (
-                  <div className="mt-2 space-y-1 text-sm">
-                    <div className="break-all font-mono text-xs text-muted">
-                      {address}
+                <h2 className="mt-1 text-xl font-semibold">
+                  Wallet
+                </h2>
+
+                <p className="mt-1 text-xs text-muted">
+                  Your wallet context powers personalized
+                  RWA analysis and execution.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-panel p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted">
+                      Wallet status
                     </div>
 
-                    <div>
-                      Network:{" "}
-                      <span className="text-accent">
-                        {chainId ===
-                        xLayer.id
-                          ? "X Layer Mainnet (196)"
-                          : chainId ===
-                              xLayerTestnet.id
-                            ? "X Layer Testnet (1952)"
-                            : `Unsupported (${chainId})`}
+                    <div className="mt-2 flex items-center gap-2">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          isConnected
+                            ? "bg-good shadow-[0_0_8px_currentColor]"
+                            : "bg-warn"
+                        }`}
+                      />
+
+                      <span className="text-sm font-semibold">
+                        {isConnected
+                          ? "Connected"
+                          : "Not connected"}
                       </span>
                     </div>
                   </div>
-                ) : (
-                  <p className="mt-2 text-sm text-muted">
-                    Not connected. Use
-                    “Connect OKX Wallet” in
-                    the header.
-                  </p>
-                )}
-              </div>
 
-              <div className="rounded-xl border border-border bg-panel p-4">
-                <div className="text-xs uppercase tracking-wide text-muted">
-                  Holdings
+                  {isConnected && (
+                    <span className="rounded-lg border border-good/20 bg-good/5 px-2 py-1 text-[9px] text-good">
+                      ACTIVE
+                    </span>
+                  )}
                 </div>
 
-                {!isConnected ? (
-                  <p className="mt-2 text-sm text-muted">
-                    Connect your wallet to
-                    read balances from X
-                    Layer.
-                  </p>
-                ) : holdingsLoading ? (
-                  <p className="mt-2 text-sm text-muted">
-                    Reading balances…
-                  </p>
-                ) : holdings.length ===
-                  0 ? (
-                  <p className="mt-2 text-sm text-muted">
-                    No balances found on
-                    this network.
-                  </p>
-                ) : (
-                  <div className="mt-2 space-y-1">
-                    {holdings.map(
-                      (h) => (
-                        <div
-                          key={h.symbol}
-                          className="flex justify-between text-sm"
-                        >
-                          <span className="text-muted">
-                            {h.symbol}
-                            {h.isNative
-                              ? " (native)"
-                              : ""}
-                          </span>
+                {isConnected ? (
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-xl border border-border bg-bg p-3">
+                      <div className="text-[9px] uppercase tracking-wide text-muted">
+                        Address
+                      </div>
 
-                          <span className="font-mono">
-                            {Number(
-                              h.balance,
-                            ).toLocaleString(
-                              undefined,
-                              {
-                                maximumFractionDigits: 6,
-                              },
-                            )}
-                          </span>
+                      <div className="mt-1 break-all font-mono text-[10px] text-white">
+                        {address}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="rounded-xl border border-border bg-bg p-3">
+                        <div className="text-[9px] uppercase tracking-wide text-muted">
+                          Network
                         </div>
-                      ),
-                    )}
+
+                        <div className="mt-1 text-xs font-medium text-accent">
+                          {chainId ===
+                          xLayer.id
+                            ? "X Layer Mainnet"
+                            : chainId ===
+                                xLayerTestnet.id
+                              ? "X Layer Testnet"
+                              : `Unsupported (${chainId})`}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-bg p-3">
+                        <div className="text-[9px] uppercase tracking-wide text-muted">
+                          Chain ID
+                        </div>
+
+                        <div className="mt-1 font-mono text-xs">
+                          {chainId}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs leading-5 text-muted">
+                    Connect your OKX Wallet from the
+                    header to personalize analysis with
+                    your real holdings.
                   </div>
                 )}
               </div>
 
-              {/* ON CHAIN PROOF */}
+              <div className="rounded-2xl border border-border bg-panel p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted">
+                      Holdings
+                    </div>
+
+                    <div className="mt-1 text-sm font-medium">
+                      On-chain assets
+                    </div>
+                  </div>
+
+                  {isConnected && (
+                    <span className="text-[10px] text-muted">
+                      {holdings.length} assets
+                    </span>
+                  )}
+                </div>
+
+                {!isConnected ? (
+                  <p className="mt-4 text-xs leading-5 text-muted">
+                    Connect your wallet to read balances
+                    from X Layer.
+                  </p>
+                ) : holdingsLoading ? (
+                  <div className="mt-4 flex items-center gap-2 text-xs text-muted">
+                    <span className="h-3 w-3 animate-spin rounded-full border border-muted/30 border-t-accent" />
+                    Reading balances…
+                  </div>
+                ) : holdings.length === 0 ? (
+                  <div className="mt-4 rounded-xl border border-dashed border-border p-5 text-center">
+                    <div className="text-xs font-medium">
+                      No balances found
+                    </div>
+
+                    <div className="mt-1 text-[10px] text-muted">
+                      No supported assets were detected on
+                      this network.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-2">
+                    {holdings.map((h) => (
+                      <div
+                        key={h.symbol}
+                        className="flex items-center justify-between rounded-xl border border-border bg-bg p-3"
+                      >
+                        <div>
+                          <div className="text-xs font-semibold">
+                            {h.symbol}
+                          </div>
+
+                          {h.isNative && (
+                            <div className="mt-0.5 text-[9px] text-muted">
+                              Native asset
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="font-mono text-xs">
+                          {Number(
+                            h.balance,
+                          ).toLocaleString(
+                            undefined,
+                            {
+                              maximumFractionDigits: 6,
+                            },
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="rounded-2xl border border-accent/30 bg-accent/5 p-4 shadow-[0_0_28px_rgba(59,158,255,0.06)]">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs uppercase tracking-wide text-muted">
-                    On-chain proof
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-muted">
+                      On-chain proof
+                    </div>
+
+                    <div className="mt-1 text-sm font-semibold">
+                      Recommendation registry
+                    </div>
                   </div>
 
                   <AnchorBadge />
                 </div>
 
-                <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between gap-3">
-                    <span className="text-muted">
+                <div className="mt-5 space-y-3 text-xs">
+                  <div className="rounded-xl border border-border bg-bg p-3">
+                    <div className="text-[9px] uppercase tracking-wide text-muted">
                       Contract
-                    </span>
+                    </div>
 
-                    <span
-                      className={
+                    <div
+                      className={`mt-1 break-all font-mono text-[10px] ${
                         loggerAddress(
                           chainId,
                         )
-                          ? "font-mono text-xs text-good break-all"
+                          ? "text-good"
                           : "text-warn"
-                      }
+                      }`}
                     >
                       {loggerAddress(
                         chainId,
                       ) ??
-                        "not available on this chain"}
-                    </span>
+                        "Not available on this chain"}
+                    </div>
                   </div>
 
                   {txHash && (
-                    <div className="rounded-xl border border-good/30 bg-good/5 p-3">
+                    <div className="rounded-xl border border-good/30 bg-good/5 p-4">
                       <div className="flex items-center gap-2 text-good">
                         <span>✓</span>
 
                         <span className="font-semibold">
                           Analysis anchored
-                          on X Layer
                         </span>
                       </div>
 
-                      <div className="mt-2 text-xs text-muted">
+                      <div className="mt-2 text-[10px] text-muted">
                         Transaction confirmed
                       </div>
 
@@ -1367,7 +1857,7 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                         )}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 block break-all font-mono text-xs text-accent hover:underline"
+                        className="mt-2 block break-all font-mono text-[10px] text-accent hover:underline"
                       >
                         {txHash}
                       </a>
@@ -1379,7 +1869,7 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                         )}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-3 inline-block rounded-lg bg-good px-3 py-1.5 text-xs font-semibold text-black hover:opacity-90"
+                        className="mt-3 inline-block rounded-lg bg-good px-3 py-2 text-[10px] font-semibold text-black hover:opacity-90"
                       >
                         View transaction ↗
                       </a>
@@ -1387,13 +1877,12 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                   )}
 
                   {latestOnChain && (
-                    <div className="pt-1">
-                      <div className="text-muted">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted">
                         Latest recommendation
-                        on-chain
                       </div>
 
-                      <pre className="mt-1 overflow-x-auto rounded-lg bg-bg p-2 text-xs text-muted">
+                      <pre className="mt-2 overflow-x-auto rounded-xl bg-bg p-3 text-[10px] leading-5 text-muted">
                         {latestOnChain}
                       </pre>
                     </div>
@@ -1403,21 +1892,19 @@ Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network
                     href={explorer}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-block pt-1 text-xs text-accent hover:underline"
+                    className="inline-block text-[10px] text-accent hover:underline"
                   >
                     Open OKLink explorer ↗
                   </a>
                 </div>
 
-                <p className="mt-4 text-xs leading-5 text-muted">
-                  “Anchor on X Layer” calls{" "}
+                <p className="mt-4 text-[10px] leading-5 text-muted">
+                  “Anchor” records the AI recommendation
+                  through{" "}
                   <span className="text-white">
                     logRecommendation(string)
                   </span>{" "}
-                  on the deployed contract. If
-                  wallet network handling fails,
-                  the app safely falls back to
-                  Demo Mode.
+                  on X Layer Testnet.
                 </p>
               </div>
             </div>

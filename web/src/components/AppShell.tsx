@@ -45,7 +45,10 @@ const recoLabel = (r: string) => RECO_LABEL[r] ?? r;
 const conf10 = (c: number) =>
   c > 0 ? Math.max(1, Math.round(c / 10)) : 0;
 
-type RiskTolerance = "conservative" | "moderate" | "aggressive";
+type RiskTolerance =
+  | "conservative"
+  | "moderate"
+  | "aggressive";
 
 function scoreColor(v: number, invert = false) {
   const good = invert ? v <= 33 : v >= 66;
@@ -58,18 +61,15 @@ function scoreColor(v: number, invert = false) {
       : "text-warn";
 }
 
-function meterBar(v: number, invert = false) {
-  const clamped = Math.max(0, Math.min(100, v));
+function scoreBarClass(v: number, invert = false) {
+  const good = invert ? v <= 33 : v >= 66;
+  const bad = invert ? v >= 66 : v <= 33;
 
-  if (invert) {
-    if (clamped >= 66) return "bg-bad";
-    if (clamped <= 33) return "bg-good";
-    return "bg-warn";
-  }
-
-  if (clamped >= 66) return "bg-good";
-  if (clamped <= 33) return "bg-bad";
-  return "bg-warn";
+  return good
+    ? "bg-good"
+    : bad
+      ? "bg-bad"
+      : "bg-warn";
 }
 
 function Meter({
@@ -81,21 +81,25 @@ function Meter({
   value: number;
   invert?: boolean;
 }) {
-  const safeValue = Math.max(0, Math.min(100, value));
+  const safeValue = Math.max(
+    0,
+    Math.min(100, Number.isFinite(value) ? value : 0),
+  );
 
   return (
-    <div className="rounded-lg border border-border bg-panel2/60 p-3">
+    <div>
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted">{label}</span>
-        <span className={`font-semibold ${scoreColor(value, invert)}`}>
-          {Math.round(value)}
+
+        <span className={`font-semibold ${scoreColor(safeValue, invert)}`}>
+          {Math.round(safeValue)}
         </span>
       </div>
 
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-bg">
+      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-panel2">
         <div
-          className={`h-full rounded-full transition-all ${meterBar(
-            value,
+          className={`h-full rounded-full transition-all ${scoreBarClass(
+            safeValue,
             invert,
           )}`}
           style={{ width: `${safeValue}%` }}
@@ -105,39 +109,10 @@ function Meter({
   );
 }
 
-function TrustStrip() {
+function AnchorBadge() {
   return (
-    <div className="rounded-xl border border-border bg-panel/80 p-3 shadow-[0_0_30px_rgba(59,158,255,0.05)]">
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div>
-          <div className="text-sm text-good">✓</div>
-          <div className="mt-1 text-[10px] uppercase tracking-wide text-muted">
-            Analysis
-          </div>
-        </div>
-
-        <div>
-          <div className="text-sm text-good">✓</div>
-          <div className="mt-1 text-[10px] uppercase tracking-wide text-muted">
-            Risk scored
-          </div>
-        </div>
-
-        <div>
-          <div className="text-sm text-good">✓</div>
-          <div className="mt-1 text-[10px] uppercase tracking-wide text-muted">
-            On-chain proof
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NetworkProof() {
-  return (
-    <div className="flex items-center justify-center gap-2 rounded-full border border-good/20 bg-good/5 px-3 py-1.5 text-[10px] uppercase tracking-wide text-good">
-      <span className="h-1.5 w-1.5 rounded-full bg-good shadow-[0_0_8px_currentColor]" />
+    <div className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent">
+      <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_currentColor]" />
       Live on X Layer Testnet
     </div>
   );
@@ -152,22 +127,20 @@ function AssetCard({
   onAnchor: (a: AssetAnalysis) => void;
   onSwap: (a: AssetAnalysis) => void;
 }) {
-  const recommendation = recoLabel(a.recommendation);
-
   return (
-    <div className="group rounded-xl border border-border bg-panel p-4 shadow-[0_0_25px_rgba(59,158,255,0.035)] transition-all hover:border-accent/30">
+    <div className="rounded-2xl border border-border bg-panel p-4 shadow-[0_0_24px_rgba(59,158,255,0.04)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-semibold tracking-tight">{a.symbol}</div>
+          <div className="font-semibold">{a.symbol}</div>
           <div className="text-xs text-muted">{a.name}</div>
         </div>
 
-        <span className="rounded-md border border-accent/20 bg-accent/5 px-2 py-1 text-xs font-medium text-accent">
-          {recommendation} · {conf10(a.confidence)}/10
+        <span className="rounded-md border border-border bg-panel2 px-2 py-1 text-xs uppercase">
+          {recoLabel(a.recommendation)} · {conf10(a.confidence)}/10
         </span>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className="mt-4 grid grid-cols-2 gap-4">
         <Meter label="Risk" value={a.risk_score} invert />
         <Meter label="Liquidity" value={a.liquidity_score} />
         <Meter label="Yield" value={a.yield_potential} />
@@ -177,25 +150,21 @@ function AssetCard({
         />
       </div>
 
-      <div className="mt-4 grid gap-3 text-xs sm:grid-cols-2">
-        <div className="rounded-lg border border-good/10 bg-good/5 p-3">
-          <div className="font-medium text-good">
-            Why this stands out
-          </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <div className="mb-1 text-muted">Why this stands out</div>
 
-          <ul className="mt-2 list-disc space-y-1 pl-4 text-good/90">
+          <ul className="list-disc space-y-1 pl-4 text-good/90">
             {a.key_opportunities.map((r, i) => (
               <li key={i}>{r}</li>
             ))}
           </ul>
         </div>
 
-        <div className="rounded-lg border border-bad/10 bg-bad/5 p-3">
-          <div className="font-medium text-bad">
-            Risk notes
-          </div>
+        <div>
+          <div className="mb-1 text-muted">Risk notes</div>
 
-          <ul className="mt-2 list-disc space-y-1 pl-4 text-bad/90">
+          <ul className="list-disc space-y-1 pl-4 text-bad/90">
             {a.key_risks.map((r, i) => (
               <li key={i}>{r}</li>
             ))}
@@ -203,19 +172,19 @@ function AssetCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <button
-          onClick={() => onAnchor(a)}
-          className="rounded-lg border border-accent/50 bg-accent px-3 py-2 text-xs font-semibold text-white shadow-[0_0_18px_rgba(59,158,255,0.22)] transition hover:brightness-110"
+          onClick={() => onSwap(a)}
+          className="rounded-lg bg-good px-3 py-1.5 text-xs font-medium text-black transition hover:opacity-90"
         >
-          ⚓ Anchor on X Layer
+          Swap on OKX DEX
         </button>
 
         <button
-          onClick={() => onSwap(a)}
-          className="rounded-lg border border-good/30 bg-good/10 px-3 py-2 text-xs font-medium text-good transition hover:bg-good/20"
+          onClick={() => onAnchor(a)}
+          className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition hover:border-accent hover:bg-accent/20"
         >
-          Swap on OKX DEX
+          ⚓ Anchor on X Layer
         </button>
       </div>
     </div>
@@ -233,7 +202,7 @@ function EmptyState({
 
       <button
         onClick={onGoAnalyze}
-        className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white shadow-[0_0_18px_rgba(59,158,255,0.2)] hover:opacity-90"
+        className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
       >
         Go to Analyze
       </button>
@@ -272,13 +241,21 @@ export function AppShell() {
 
   const [rawJson, setRawJson] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] =
+    useState<string | null>(null);
 
-  const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [holdingsLoading, setHoldingsLoading] = useState(false);
+  const [status, setStatus] =
+    useState<string | null>(null);
 
-  const [txHash, setTxHash] = useState<string | null>(null);
+  const [holdings, setHoldings] =
+    useState<Holding[]>([]);
+
+  const [holdingsLoading, setHoldingsLoading] =
+    useState(false);
+
+  const [txHash, setTxHash] =
+    useState<string | null>(null);
+
   const [latestOnChain, setLatestOnChain] =
     useState<string>("");
 
@@ -348,15 +325,20 @@ export function AppShell() {
     };
   }, [chainId]);
 
-  function onTouchStart(e: React.TouchEvent) {
+  function onTouchStart(
+    e: React.TouchEvent,
+  ) {
     touchStart.current = {
       x: e.touches[0].clientX,
       y: e.touches[0].clientY,
     };
   }
 
-  function onTouchEnd(e: React.TouchEvent) {
+  function onTouchEnd(
+    e: React.TouchEvent,
+  ) {
     const s = touchStart.current;
+
     touchStart.current = null;
 
     if (!s) return;
@@ -396,16 +378,19 @@ export function AppShell() {
           : "wallet not connected",
       };
 
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const res = await fetch(
+        "/api/analyze",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt,
+            context,
+          }),
         },
-        body: JSON.stringify({
-          prompt,
-          context,
-        }),
-      });
+      );
 
       const data = await res.json();
 
@@ -437,6 +422,10 @@ export function AppShell() {
     }
   }
 
+  /* -------------------------------------------------
+     ON-CHAIN ANCHOR
+  ------------------------------------------------- */
+
   async function doAnchor(
     payload: AnchorPayload,
     label: string,
@@ -449,6 +438,7 @@ export function AppShell() {
       setError(
         "Connect your OKX wallet first, then try Anchor.",
       );
+
       setPage(3);
       return;
     }
@@ -459,22 +449,27 @@ export function AppShell() {
       setError(
         "Contract address not found.",
       );
+
       setPage(3);
       return;
     }
 
     const X_LAYER_TESTNET_PARAMS = {
       chainId: "0x7a0",
+
       chainName: "X Layer Testnet",
+
       nativeCurrency: {
         name: "OKB",
         symbol: "OKB",
         decimals: 18,
       },
+
       rpcUrls: [
         "https://testrpc.xlayer.tech/terigon",
         "https://xlayertestrpc.okx.com/terigon",
       ],
+
       blockExplorerUrls: [
         "https://www.oklink.com/x-layer-testnet",
       ],
@@ -494,6 +489,7 @@ export function AppShell() {
           await provider.request({
             method:
               "wallet_switchEthereumChain",
+
             params: [
               {
                 chainId: "0x7a0",
@@ -501,10 +497,13 @@ export function AppShell() {
             ],
           });
         } catch (switchError: any) {
-          if (switchError?.code === 4902) {
+          if (
+            switchError?.code === 4902
+          ) {
             await provider.request({
               method:
                 "wallet_addEthereumChain",
+
               params: [
                 X_LAYER_TESTNET_PARAMS,
               ],
@@ -536,16 +535,19 @@ export function AppShell() {
       const hash =
         await writeContractAsync({
           address: addr,
+
           abi: LOGGER_ABI,
+
           functionName:
             "logRecommendation",
+
           args: [recString],
         });
 
       setTxHash(hash);
 
       setStatus(
-        `Successfully anchored ${label} on X Layer Testnet.`,
+        "✅ Successfully anchored on X Layer Testnet!",
       );
 
       setPage(3);
@@ -559,7 +561,11 @@ export function AppShell() {
     }
 
     setStatus(
-      `Demo Mode — Analysis would be anchored on X Layer Testnet.\n\nContract: ${addr}\n\nReal on-chain anchoring is ready. Currently limited by OKX Wallet mobile network handling.`,
+      `✅ Demo Mode — Analysis would be anchored on X Layer Testnet
+
+Contract: ${addr}
+
+Real on-chain anchoring is ready. Currently limited by OKX Wallet mobile network handling.`,
     );
 
     setPage(3);
@@ -607,6 +613,7 @@ export function AppShell() {
             "hold",
         ),
       },
+
       "this analysis",
     );
   }
@@ -626,11 +633,11 @@ export function AppShell() {
 
         confidence: a.confidence,
 
-        recommendation:
-          recoLabel(
-            a.recommendation,
-          ),
+        recommendation: recoLabel(
+          a.recommendation,
+        ),
       },
+
       a.symbol,
     );
   }
@@ -641,7 +648,7 @@ export function AppShell() {
     window.open(
       buildOkxDexSwapUrl(
         action,
-        chainId,
+        chainId || xLayer.id,
       ),
       "_blank",
       "noopener",
@@ -654,7 +661,7 @@ export function AppShell() {
     window.open(
       buildSwapUrlForSymbol(
         a.symbol,
-        chainId,
+        chainId || xLayer.id,
       ),
       "_blank",
       "noopener",
@@ -683,15 +690,21 @@ export function AppShell() {
           },
           body: JSON.stringify({
             action: "swap",
+
             chainId:
               chainId || xLayer.id,
+
             fromSymbol:
               action.from_token,
+
             toSymbol:
               action.to_token,
+
             amountUsd:
               action.amount_usd,
+
             slippage: "0.01",
+
             userWalletAddress:
               address,
           }),
@@ -731,6 +744,7 @@ export function AppShell() {
         await sendTransactionAsync({
           to: data.tx.to,
           data: data.tx.data,
+
           value: data.tx.value
             ? BigInt(data.tx.value)
             : undefined,
@@ -752,10 +766,8 @@ export function AppShell() {
 
   const explorer =
     chainId === xLayer.id
-      ? xLayer.blockExplorers
-          .default.url
-      : xLayerTestnet
-          .blockExplorers
+      ? xLayer.blockExplorers.default.url
+      : xLayerTestnet.blockExplorers
           .default.url;
 
   return (
@@ -771,7 +783,7 @@ export function AppShell() {
         )}
 
         {status && (
-          <div className="mb-4 rounded-lg border border-good/40 bg-good/10 p-3 text-sm text-good break-all whitespace-pre-line shadow-[0_0_20px_rgba(61,220,151,0.08)]">
+          <div className="mb-4 rounded-xl border border-good/40 bg-good/10 p-4 text-sm text-good break-all whitespace-pre-line shadow-[0_0_24px_rgba(61,220,151,0.08)]">
             {status}
           </div>
         )}
@@ -780,62 +792,13 @@ export function AppShell() {
           key={page}
           className="page-enter space-y-6"
         >
+          {/* =========================
+              ANALYZE
+          ========================== */}
+
           {page === 0 && (
             <div className="space-y-4">
-              <div className="relative overflow-hidden rounded-2xl border border-accent/20 bg-panel p-5 shadow-[0_0_45px_rgba(59,158,255,0.08)]">
-                <div className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-accent/10 blur-3xl" />
-
-                <div className="relative">
-                  <div className="mb-3 flex justify-center">
-                    <NetworkProof />
-                  </div>
-
-                  <div className="text-center">
-                    <div className="text-xs uppercase tracking-[0.18em] text-muted">
-                      AI RWA analyst
-                    </div>
-
-                    <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-                      Know what you're buying.
-                      <span className="block text-accent">
-                        Prove why.
-                      </span>
-                    </h2>
-
-                    <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-muted">
-                      Analyze tokenized real-world
-                      assets, personalize the verdict
-                      to your portfolio, then anchor
-                      the recommendation on X Layer.
-                    </p>
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    {[
-                      "TSLAx",
-                      "AAPLx",
-                      "NVDAx",
-                      "T-Bills",
-                    ].map((symbol) => (
-                      <button
-                        key={symbol}
-                        onClick={() =>
-                          setPrompt(
-                            `Analyze ${symbol} for a 6-month hold.`,
-                          )
-                        }
-                        className="rounded-full border border-border bg-panel2 px-3 py-1.5 text-xs font-medium text-muted transition hover:border-accent/40 hover:text-white"
-                      >
-                        {symbol}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <TrustStrip />
-
-              <div className="rounded-xl border border-border bg-panel p-4 shadow-[0_0_25px_rgba(59,158,255,0.03)]">
+              <div className="rounded-2xl border border-border bg-panel p-4 shadow-[0_0_28px_rgba(59,158,255,0.04)]">
                 <div className="text-xs uppercase tracking-wide text-muted">
                   Ask the analyst
                 </div>
@@ -870,7 +833,7 @@ export function AppShell() {
                           className={`rounded-md px-3 py-1 text-xs capitalize ${
                             riskTolerance ===
                             r
-                              ? "bg-accent text-white shadow-[0_0_12px_rgba(59,158,255,0.2)]"
+                              ? "bg-accent text-white"
                               : "text-muted hover:text-white"
                           }`}
                         >
@@ -881,7 +844,7 @@ export function AppShell() {
                   </div>
                 </div>
 
-                <div className="mt-4">
+                <div className="mt-3 flex flex-wrap items-center gap-3">
                   <button
                     onClick={
                       runAnalysis
@@ -890,19 +853,16 @@ export function AppShell() {
                       loading ||
                       !prompt.trim()
                     }
-                    className="w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,158,255,0.25)] transition hover:brightness-110 disabled:opacity-50"
+                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white shadow-[0_0_18px_rgba(59,158,255,0.2)] transition hover:opacity-90 disabled:opacity-50"
                   >
                     {loading
                       ? "Analyzing…"
-                      : "Analyze an RWA →"}
+                      : "Analyze"}
                   </button>
-                </div>
 
-                <div className="mt-3 text-center text-xs text-muted">
                   {isConnected ? (
-                    <>
-                      Personalized with your
-                      holdings:{" "}
+                    <span className="text-xs text-muted">
+                      Using your holdings:{" "}
                       <span className="text-white">
                         {holdingsLoading
                           ? "reading…"
@@ -910,9 +870,13 @@ export function AppShell() {
                               holdings,
                             )}
                       </span>
-                    </>
+                    </span>
                   ) : (
-                    "Connect your wallet to personalize with your real holdings."
+                    <span className="text-xs text-muted">
+                      Connect a wallet to
+                      personalize with your
+                      real holdings.
+                    </span>
                   )}
                 </div>
               </div>
@@ -941,33 +905,39 @@ export function AppShell() {
             </div>
           )}
 
+          {/* =========================
+              RESULTS
+          ========================== */}
+
           {page === 1 &&
             (analysis ? (
               <div className="space-y-6">
-                <div className="rounded-xl border border-border bg-panel p-4 shadow-[0_0_25px_rgba(59,158,255,0.04)]">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="rounded-2xl border border-border bg-panel p-4 shadow-[0_0_28px_rgba(59,158,255,0.05)]">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-xs uppercase tracking-wide text-muted">
                         AI recommendation
                       </div>
 
-                      <p className="mt-2 text-sm leading-6">
-                        {analysis.summary}
-                      </p>
+                      <div className="mt-2">
+                        <AnchorBadge />
+                      </div>
                     </div>
 
                     <button
                       onClick={
                         anchorAnalysis
                       }
-                      className="shrink-0 rounded-xl bg-accent px-4 py-2.5 text-xs font-semibold text-white shadow-[0_0_22px_rgba(59,158,255,0.3)] transition hover:brightness-110"
+                      className="rounded-lg border border-accent/50 bg-accent px-3 py-2 text-xs font-semibold text-white shadow-[0_0_20px_rgba(59,158,255,0.25)] transition hover:opacity-90"
                     >
                       ⚓ Anchor on X Layer
                     </button>
                   </div>
-                </div>
 
-                <NetworkProof />
+                  <p className="mt-4 text-sm leading-6">
+                    {analysis.summary}
+                  </p>
+                </div>
 
                 {analysis.assets_analyzed
                   .length > 1 && (
@@ -983,18 +953,23 @@ export function AppShell() {
                             <th className="py-1 pr-3">
                               Asset
                             </th>
+
                             <th className="py-1 pr-3">
                               Call
                             </th>
+
                             <th className="py-1 pr-3">
                               Conf.
                             </th>
+
                             <th className="py-1 pr-3">
                               Risk
                             </th>
+
                             <th className="py-1 pr-3">
                               Liq.
                             </th>
+
                             <th className="py-1 pr-3">
                               Yield
                             </th>
@@ -1011,7 +986,9 @@ export function AppShell() {
                                 className="border-t border-border"
                               >
                                 <td className="py-1.5 pr-3 font-medium">
-                                  {a.symbol}
+                                  {
+                                    a.symbol
+                                  }
                                 </td>
 
                                 <td className="py-1.5 pr-3">
@@ -1028,16 +1005,18 @@ export function AppShell() {
                                 </td>
 
                                 <td
-                                  className={`py-1.5 pr-3 ${scoreColor(
+                                  className={`py-1.5 pr-3 font-medium ${scoreColor(
                                     a.risk_score,
                                     true,
                                   )}`}
                                 >
-                                  {a.risk_score}
+                                  {
+                                    a.risk_score
+                                  }
                                 </td>
 
                                 <td
-                                  className={`py-1.5 pr-3 ${scoreColor(
+                                  className={`py-1.5 pr-3 font-medium ${scoreColor(
                                     a.liquidity_score,
                                   )}`}
                                 >
@@ -1047,7 +1026,7 @@ export function AppShell() {
                                 </td>
 
                                 <td
-                                  className={`py-1.5 pr-3 ${scoreColor(
+                                  className={`py-1.5 pr-3 font-medium ${scoreColor(
                                     a.yield_potential,
                                   )}`}
                                 >
@@ -1081,15 +1060,27 @@ export function AppShell() {
                   )}
                 </div>
 
-                <div className="rounded-xl border border-border bg-panel p-4">
-                  <div className="text-xs uppercase tracking-wide text-muted">
-                    Raw analysis data
-                  </div>
+                {/* RAW JSON COLLAPSED */}
 
-                  <pre className="mt-2 max-h-96 overflow-auto rounded-lg bg-bg p-3 text-xs leading-5 text-muted">
-                    {rawJson}
-                  </pre>
-                </div>
+                <details className="rounded-xl border border-border bg-panel">
+                  <summary className="cursor-pointer list-none p-4 text-sm font-medium text-muted transition hover:text-white">
+                    <span className="flex items-center justify-between">
+                      <span>
+                        View raw analysis data
+                      </span>
+
+                      <span className="text-xs text-muted">
+                        Developer data
+                      </span>
+                    </span>
+                  </summary>
+
+                  <div className="border-t border-border p-4">
+                    <pre className="overflow-x-auto rounded-lg bg-bg p-3 text-xs leading-5 text-muted">
+                      {rawJson}
+                    </pre>
+                  </div>
+                </details>
               </div>
             ) : (
               <EmptyState
@@ -1099,6 +1090,10 @@ export function AppShell() {
               />
             ))}
 
+          {/* =========================
+              ACTIONS
+          ========================== */}
+
           {page === 2 &&
             (analysis ? (
               <div className="space-y-6">
@@ -1107,7 +1102,7 @@ export function AppShell() {
                     Suggested portfolio
                   </div>
 
-                  <div className="mt-3 flex h-3 w-full overflow-hidden rounded-full">
+                  <div className="mt-2 flex h-3 w-full overflow-hidden rounded-full">
                     {Object.entries(
                       analysis
                         .portfolio_suggestion
@@ -1145,9 +1140,7 @@ export function AppShell() {
                         .allocation,
                     ).map(
                       ([sym, pct]) => (
-                        <span
-                          key={sym}
-                        >
+                        <span key={sym}>
                           {sym} {pct}%
                         </span>
                       ),
@@ -1183,7 +1176,9 @@ export function AppShell() {
                             </div>
 
                             <div className="text-xs text-muted">
-                              {act.reason}
+                              {
+                                act.reason
+                              }
                             </div>
                           </div>
 
@@ -1197,7 +1192,8 @@ export function AppShell() {
                               }
                               className="shrink-0 rounded-lg bg-good px-3 py-1.5 text-xs font-medium text-black hover:opacity-90"
                             >
-                              Swap on OKX DEX
+                              Swap on
+                              OKX DEX
                             </button>
                           ) : (
                             <span className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-muted">
@@ -1223,6 +1219,10 @@ export function AppShell() {
                 }
               />
             ))}
+
+          {/* =========================
+              WALLET
+          ========================== */}
 
           {page === 3 && (
             <div className="space-y-4">
@@ -1253,8 +1253,8 @@ export function AppShell() {
                 ) : (
                   <p className="mt-2 text-sm text-muted">
                     Not connected. Use
-                    “Connect OKX Wallet”
-                    in the header.
+                    “Connect OKX Wallet” in
+                    the header.
                   </p>
                 )}
               </div>
@@ -1267,7 +1267,8 @@ export function AppShell() {
                 {!isConnected ? (
                   <p className="mt-2 text-sm text-muted">
                     Connect your wallet to
-                    read balances from X Layer.
+                    read balances from X
+                    Layer.
                   </p>
                 ) : holdingsLoading ? (
                   <p className="mt-2 text-sm text-muted">
@@ -1276,8 +1277,8 @@ export function AppShell() {
                 ) : holdings.length ===
                   0 ? (
                   <p className="mt-2 text-sm text-muted">
-                    No balances found on this
-                    network.
+                    No balances found on
+                    this network.
                   </p>
                 ) : (
                   <div className="mt-2 space-y-1">
@@ -1300,8 +1301,7 @@ export function AppShell() {
                             ).toLocaleString(
                               undefined,
                               {
-                                maximumFractionDigits:
-                                  6,
+                                maximumFractionDigits: 6,
                               },
                             )}
                           </span>
@@ -1312,16 +1312,18 @@ export function AppShell() {
                 )}
               </div>
 
-              <div className="rounded-xl border border-accent/20 bg-panel p-4 shadow-[0_0_30px_rgba(59,158,255,0.05)]">
+              {/* ON CHAIN PROOF */}
+
+              <div className="rounded-2xl border border-accent/30 bg-accent/5 p-4 shadow-[0_0_28px_rgba(59,158,255,0.06)]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-xs uppercase tracking-wide text-muted">
                     On-chain proof
                   </div>
 
-                  <NetworkProof />
+                  <AnchorBadge />
                 </div>
 
-                <div className="mt-3 space-y-2 text-sm">
+                <div className="mt-4 space-y-3 text-sm">
                   <div className="flex justify-between gap-3">
                     <span className="text-muted">
                       Contract
@@ -1344,9 +1346,18 @@ export function AppShell() {
                   </div>
 
                   {txHash && (
-                    <div className="rounded-lg border border-good/20 bg-good/5 p-3">
-                      <div className="text-xs text-good">
-                        ✓ Recommendation anchored
+                    <div className="rounded-xl border border-good/30 bg-good/5 p-3">
+                      <div className="flex items-center gap-2 text-good">
+                        <span>✓</span>
+
+                        <span className="font-semibold">
+                          Analysis anchored
+                          on X Layer
+                        </span>
+                      </div>
+
+                      <div className="mt-2 text-xs text-muted">
+                        Transaction confirmed
                       </div>
 
                       <a
@@ -1356,7 +1367,19 @@ export function AppShell() {
                         )}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 block font-mono text-xs text-accent hover:underline break-all"
+                        className="mt-1 block break-all font-mono text-xs text-accent hover:underline"
+                      >
+                        {txHash}
+                      </a>
+
+                      <a
+                        href={explorerTxUrl(
+                          1952,
+                          txHash,
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-block rounded-lg bg-good px-3 py-1.5 text-xs font-semibold text-black hover:opacity-90"
                       >
                         View transaction ↗
                       </a>
@@ -1386,15 +1409,15 @@ export function AppShell() {
                   </a>
                 </div>
 
-                <p className="mt-3 text-xs leading-5 text-muted">
+                <p className="mt-4 text-xs leading-5 text-muted">
                   “Anchor on X Layer” calls{" "}
                   <span className="text-white">
                     logRecommendation(string)
                   </span>{" "}
-                  on the deployed contract.
-                  Real transactions are supported,
-                  with Demo Mode as a fallback when
-                  mobile wallet network handling fails.
+                  on the deployed contract. If
+                  wallet network handling fails,
+                  the app safely falls back to
+                  Demo Mode.
                 </p>
               </div>
             </div>
